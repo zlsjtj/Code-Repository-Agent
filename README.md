@@ -1,664 +1,132 @@
-# 代码库问答与改动助手（AI Agent）
+# 代码库问答与改动助手
 
-面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经推进到第十三阶段，并把工作台继续扩展到了“支持 GitHub 仓库 clone 导入并进入完整工作流”：
+一个面向代码仓库的可扩展 AI Agent 项目。它不只是“对代码聊天”，而是围绕真实工程任务提供一条完整链路：
 
-- 第一阶段：项目骨架、FastAPI、Next.js、SQLite schema、健康检查、仓库导入
-- 第二阶段：本地仓库扫描、文件树接口、基础 chunk 索引、索引状态与调试查询
-- 第三阶段：`list_repo_tree`、`search_repo`、`read_file`、`find_symbol` 工具与统一返回结构
-- 第四阶段：OpenAI Agents SDK 问答主流程、`/api/chat/ask`、引用返回与 `ConversationTrace` 落库
-- 第五阶段：前端工作台增强，补当前仓库上下文、最近会话切换、引用摘要和更完整的问答展示
-- 第六阶段：单文件 patch 草案、unified diff 预览，以及前端 patch 工作区
-- 第七阶段：基于内容哈希校验的 patch 应用接口，把已确认的单文件草案安全写回工作区
-- 第八阶段：自动发现白名单检查项，支持运行 `pytest` / `npm run typecheck|lint|test` 并把结果返回到前端
-- 第九阶段：把 patch 应用与 checks 运行编排成一个一键闭环，减少手动切换和重复操作
-- 第十阶段：根据 patch 目标路径自动推荐 checks 组合，让 apply-and-verify 更贴近真实改动范围
-- 第十一阶段：支持多文件 patch 草案批量预览，按文件返回 grouped diff，并把推荐 checks 自动扩展到多路径改动
-- 第十二阶段：支持多文件 patch 的勾选确认、all-or-nothing 批量写回，以及批量 apply 后运行 checks
-- 第十三阶段：支持把 GitHub 仓库 clone 到受管目录，并复用现有索引、问答、patch 和 checks 流程
+- 导入本地仓库或 GitHub 仓库
+- 建立基础代码索引
+- 通过受控工具检索代码、阅读文件、定位符号
+- 基于证据回答问题并返回引用
+- 生成 patch 草案与 diff 预览
+- 在安全约束下执行 lint / test 闭环
 
-项目目标不是做一个“会聊天的网页”，而是做一个“能围绕代码任务调用工具、引用证据、逐步扩展到改动建议和检查闭环”的代码助手。
+项目采用 `FastAPI + Next.js + SQLite + OpenAI Agents SDK`，重点体现的是一个可调用工具、可引用证据、可持续扩展的代码 Agent 系统，而不是单一的聊天界面。
 
-## 当前进度
+## 项目简介
 
-当前仓库已经支持：
+在日常开发里，团队常见的需求并不是“让模型解释一段代码”，而是：
 
-- 登记本地仓库路径
-- 保存 GitHub 仓库元信息
-- 把 GitHub 仓库 clone 到受管 `repos/` 目录
-- 扫描本地仓库文件树
-- 过滤常见无关目录、二进制文件和超大文件
-- 按行切分文本文件并写入 `FileChunk`
-- 查询索引状态
-- 查询部分 chunk，便于调试下一阶段检索工具
-- 在前端工作台直接触发索引
-- 通过统一工具接口执行目录树、关键词检索、按行读文件和符号定位
-- 通过 OpenAI Agents SDK 自动调用工具并返回带引用的回答
-- 持久化问答 trace，包括工具调用摘要、引用和最终答案
-- 在前端页面内保留最近会话，支持切回历史回答继续查看引用
-- 生成单文件 patch 草案，并在前端直接预览 unified diff
-- 一次为多个目标文件生成 patch 草案预览，并按文件分组查看 diff
-- 勾选多文件 patch 草案中的目标项，并做 all-or-nothing 批量写回
-- 把确认过的 patch 草案安全写回本地工作区，并避免覆盖已变化的文件
-- 自动发现并运行安全白名单内的 lint/test 检查，直接返回 stdout / stderr 摘要
-- 一键完成 patch 写回和默认 checks 验证，并把结果汇总回工作台
-- 根据改动文件路径自动推荐更相关的 checks 组合，并在前端直接使用推荐结果
+- 这个模块到底做什么
+- 关键入口在哪
+- 某个 bug 可能出在哪几层
+- 如果要改动，应该先改哪些文件
+- 改完之后如何快速验证没有破坏已有行为
 
-当前仍未实现：
+这个项目针对的就是这类场景。系统将代码仓库转成可检索的结构化上下文，再通过受控工具链驱动 Agent 完成“检索 -> 阅读 -> 回答 -> 引用 -> 改动建议 -> 验证”的工作流。
 
-- checks 失败后的自动回滚
-- 更细粒度地结合 diff 内容、语言和目录结构推荐 checks
-- 语义检索、rerank 和 AST 级符号定位增强
-- benchmark 样例、系统化评测和 trace 可视化
+如果从作品集角度看，这个项目的价值在于：
 
-## 项目目录
+- 它把 LLM 能力落到了工程任务，而不是停留在通用对话
+- 它强调工具调用、证据引用和风险约束
+- 架构上为检索增强、代码修改和自动验证预留了扩展空间
+
+## 核心能力
+
+- 仓库导入：支持导入本地代码仓库，也支持将 GitHub 仓库 clone 到受管目录后继续处理。
+- 基础索引：扫描文件树、过滤无关目录和超大文件、按行切分代码片段并写入 SQLite。
+- 代码检索工具：支持 `list_repo_tree`、`search_repo`、`read_file`、`find_symbol`。
+- Agent 问答：通过 OpenAI Agents SDK 调用工具后回答问题，并返回引用证据与调用摘要。
+- 前端工作台：支持仓库选择、会话查看、引用展示、patch 预览和检查结果查看。
+- Patch 草案：支持单文件和多文件 patch 草案、unified diff 预览、逐项确认和批量应用。
+- 验证闭环：自动发现安全白名单内的 `pytest` / `npm run typecheck|lint|test`，并支持应用 patch 后直接运行检查。
+- 风险约束：通过路径约束、哈希校验、白名单命令和分步确认降低误改和误执行风险。
+
+## 系统架构图
+
+```text
++---------------------------+
+|       Next.js Frontend    |
+|  会话页 / 引用 / Patch UI  |
++------------+--------------+
+             |
+             | HTTP API
+             v
++---------------------------+
+|      FastAPI Backend      |
+|  Router / Schemas / APIs  |
++------------+--------------+
+             |
+   +---------+---------+--------------------+
+   |                   |                    |
+   v                   v                    v
++--------+     +---------------+     +--------------+
+| Agent  |     | Tool Runtime  |     | Patch/Checks |
+| Runner |     | search/read   |     | diff/apply   |
+| OpenAI |     | tree/symbol   |     | lint/test    |
++----+---+     +-------+-------+     +------+-------+
+     |                   |                    |
+     |                   |                    |
+     v                   v                    v
++---------------------------------------------------+
+|                Repository Workspace               |
+| local path / cloned GitHub repo / scanned files  |
++----------------------+----------------------------+
+                       |
+                       v
++---------------------------------------------------+
+| SQLite                                             |
+| Repository / FileChunk / ConversationTrace         |
++---------------------------------------------------+
+```
+
+核心链路可以概括为：
+
+1. 导入仓库并建立工作区
+2. 扫描文件并生成索引
+3. Agent 通过工具检索上下文
+4. 回答时返回引用证据
+5. 需要改动时生成 patch 草案
+6. 确认后应用 patch 并运行 checks
+
+## 目录结构
 
 ```text
 .
 ├─ backend/
 │  ├─ app/
-│  │  ├─ api/
-│  │  │  ├─ router.py
-│  │  │  └─ routes/
-│  │  │     ├─ health.py
-│  │  │     ├─ chat.py
-│  │  │     └─ repositories.py
-│  │  ├─ agents/
-│  │  │  └─ code_assistant.py
-│  │  ├─ core/
-│  │  │  ├─ config.py
-│  │  │  └─ db.py
-│  │  ├─ indexing/
-│  │  │  ├─ chunker.py
-│  │  │  └─ scanner.py
-│  │  ├─ models/
-│  │  │  ├─ repository.py
-│  │  │  ├─ file_chunk.py
-│  │  │  └─ conversation_trace.py
-│  │  ├─ schemas/
-│  │  │  ├─ common.py
-│  │  │  ├─ chat.py
-│  │  │  └─ repository.py
-│  │  ├─ services/
-│  │  │  ├─ chat_service.py
-│  │  │  ├─ repository_service.py
-│  │  │  └─ indexing_service.py
-│  │  ├─ tools/
+│  │  ├─ api/              # FastAPI 路由
+│  │  ├─ agents/           # Agent 定义与运行上下文
+│  │  ├─ core/             # 配置、数据库初始化
+│  │  ├─ indexing/         # 文件扫描与 chunk 切分
+│  │  ├─ models/           # SQLAlchemy 模型
+│  │  ├─ schemas/          # Pydantic 请求/响应模型
+│  │  ├─ services/         # 仓库、索引、问答、patch、checks
+│  │  ├─ tools/            # 代码检索工具实现
 │  │  └─ main.py
-│  ├─ scripts/
 │  ├─ tests/
-│  ├─ pyproject.toml
-│  └─ README.md
+│  └─ pyproject.toml
 ├─ frontend/
-│  ├─ app/
-│  ├─ components/
-│  ├─ lib/
-│  ├─ public/
-│  ├─ next.config.mjs
-│  ├─ package.json
-│  └─ tsconfig.json
-├─ repos/
-├─ data/
-├─ benchmarks/
-├─ docs/
+│  ├─ app/                 # Next.js App Router
+│  ├─ components/          # 工作台、问答、引用、patch、checks
+│  ├─ lib/                 # API client 与类型定义
+│  └─ package.json
+├─ data/                   # SQLite 数据与运行时文件
+├─ repos/                  # GitHub 仓库 clone 目录
+├─ benchmarks/             # 预留：评测数据
+├─ docs/                   # 预留：设计文档
 ├─ .env.example
 └─ README.md
 ```
 
-## 已实现能力
-
-### 后端
-
-- FastAPI 应用入口与统一路由注册
-- 基于 SQLite 的 SQLAlchemy 数据库初始化
-- 三张核心表：
-  - `Repository`
-  - `FileChunk`
-  - `ConversationTrace`
-- 仓库服务：
-  - 本地路径校验
-  - GitHub 元信息登记
-  - 仓库列表 / 详情查询
-- 基础索引服务：
-  - 文件树扫描
-  - 忽略目录过滤
-  - 二进制文件过滤
-  - 超大文件过滤
-  - 行级 chunk 切分
-  - 主语言粗略统计
-- 调试型查询接口：
-  - 文件树
-  - 索引状态
-  - chunk 列表
-- 问答主流程：
-  - Code Assistant Agent
-  - 受控工具调用
-  - 结构化回答
-  - 引用返回
-  - trace 持久化
-
-### 前端
-
-- Next.js App Router 基础结构
-- 首页工作台
-- 后端健康状态探测
-- 仓库导入表单
-- 已登记仓库列表
-- 触发索引按钮
-- 当前仓库上下文面板
-- 问答区、引用区和 trace 摘要
-- 页面内最近会话历史切换
-- Patch 草案表单与 diff 预览
-- 多文件 patch 草案输入与 grouped diff 预览
-- 多文件 patch 结果勾选与批量应用
-- Checks 面板与结果摘要
-- 一键应用并验证入口
-- 推荐 checks 展示与一键使用入口
-
-## 数据模型
-
-### `Repository`
-
-记录导入仓库的元信息。
-
-- `id`
-- `name`
-- `source_type`
-- `source_url`
-- `root_path`
-- `default_branch`
-- `primary_language`
-- `status`
-- `created_at`
-- `updated_at`
-
-### `FileChunk`
-
-保存切分后的代码片段，为后续检索和引用提供基础。
-
-- `id`
-- `repo_id`
-- `path`
-- `language`
-- `chunk_index`
-- `start_line`
-- `end_line`
-- `text`
-- `hash`
-- `symbols_json`
-- `created_at`
-
-### `ConversationTrace`
-
-为后续问答 trace、工具调用和引用链路预留。
-
-- `id`
-- `session_id`
-- `repo_id`
-- `user_query`
-- `tool_calls_json`
-- `citations_json`
-- `final_answer`
-- `latency_ms`
-- `created_at`
-
-## API
-
-### 基础
-
-- `GET /api/health`
-- `GET /api/meta`
-
-### 仓库管理
-
-- `POST /api/repositories`
-- `GET /api/repositories`
-- `GET /api/repositories/{repo_id}`
-
-### 索引与调试
-
-- `GET /api/repositories/{repo_id}/tree`
-- `POST /api/repositories/{repo_id}/index`
-- `GET /api/repositories/{repo_id}/index-status`
-- `GET /api/repositories/{repo_id}/chunks`
-
-### 工具调试接口
-
-- `POST /api/tools/list-tree`
-- `POST /api/tools/search`
-- `POST /api/tools/read`
-- `POST /api/tools/find-symbol`
-
-这些接口共用统一的返回结构：
-
-```json
-{
-  "tool_name": "search_repo",
-  "repo_id": 1,
-  "items": [
-    {
-      "kind": "search_match",
-      "path": "src/service.py",
-      "start_line": 5,
-      "end_line": 10,
-      "language": "python",
-      "content": "def fetch_user(user_id: int): ...",
-      "score": 3.5
-    }
-  ],
-  "truncated": false,
-  "total_matches": 1,
-  "summary": "Found 1 indexed chunk matches for query 'fetch_user'."
-}
-```
-
-### 问答接口
-
-- `POST /api/chat/ask`
-
-### Patch 草案接口
-
-- `POST /api/patches/draft`
-- `POST /api/patches/draft-batch`
-- `POST /api/patches/apply`
-- `POST /api/patches/apply-batch`
-- `POST /api/patches/apply-and-checks`
-- `POST /api/patches/apply-batch-and-checks`
-
-### Checks 接口
-
-- `GET /api/checks/repositories/{repo_id}/profiles`
-- `POST /api/checks/recommend`
-- `POST /api/checks/run`
-
-请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "target_path": "backend/app/services/chat_service.py",
-  "instruction": "在不改变现有接口的前提下，补一个更明确的错误提示。"
-}
-```
-
-返回结构：
-
-```json
-{
-  "session_id": "86f7...",
-  "repo_id": 1,
-  "target_path": "backend/app/services/chat_service.py",
-  "base_content_sha256": "9a8c...",
-  "summary": "补强配置错误提示。",
-  "rationale": "只改动错误消息，避免影响主流程。",
-  "warnings": [
-    "应用前建议先再看一遍 diff。"
-  ],
-  "original_line_count": 98,
-  "proposed_line_count": 101,
-  "line_count_delta": 3,
-  "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ...",
-  "proposed_content": "...",
-  "trace_summary": {
-    "agent_name": "PatchDraftAssistant",
-    "model": "gpt-4.1-mini",
-    "latency_ms": 980
-  }
-}
-```
-
-说明：
-
-- 只要仓库拥有可用 `root_path`，无论是本地路径还是 GitHub clone，都可以继续进入索引、问答、patch 和 checks 流程
-- `draft` 只处理单个现有文本文件
-- `draft-batch` 支持一次预览多个现有文本文件，默认上限 `5` 个文件
-- `draft` 返回的是预览结果，不会自动把文件写回工作区
-- `draft-batch` 返回 grouped diff 预览，前端可以在此基础上勾选要落地的文件
-- `apply` 会在写入前校验 `base_content_sha256`，只有目标文件仍与草案基线一致时才会真正写入
-- `apply-batch` 会先校验整批选中文件的基线哈希，全部通过后才开始写回；任意一个文件冲突都会整批拒绝
-- `apply-batch-and-checks` 会在批量写回后运行选中的 checks，但当前不会因为 checks 失败而自动回滚文件
-- 文件大小默认限制在 `500` 行、`20,000` 字符以内，优先保证草案稳定性
-
-`POST /api/patches/draft-batch` 请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "target_paths": [
-    "backend/app/services/chat_service.py",
-    "frontend/components/checks/checks-panel.tsx"
-  ],
-  "instruction": "围绕这两个文件做最小必要改动，并给我分组 diff 预览。"
-}
-```
-
-返回结构：
-
-```json
-{
-  "session_id": "86f7...",
-  "repo_id": 1,
-  "target_paths": [
-    "backend/app/services/chat_service.py",
-    "frontend/components/checks/checks-panel.tsx"
-  ],
-  "summary": "Generated patch drafts for 2 file(s). Review the grouped diffs first, then apply any accepted changes one file at a time.",
-  "warnings": [],
-  "changed_file_count": 2,
-  "total_original_line_count": 180,
-  "total_proposed_line_count": 188,
-  "total_line_count_delta": 8,
-  "combined_unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ...",
-  "items": [
-    {
-      "target_path": "backend/app/services/chat_service.py",
-      "base_content_sha256": "9a8c...",
-      "summary": "补强错误提示。",
-      "rationale": "只调整文案，不改动已有接口。",
-      "warnings": [],
-      "original_line_count": 98,
-      "proposed_line_count": 101,
-      "line_count_delta": 3,
-      "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ...",
-      "proposed_content": "...",
-      "trace_summary": {
-        "agent_name": "PatchDraftAssistant",
-        "model": "gpt-4.1-mini",
-        "latency_ms": 980
-      }
-    }
-  ],
-  "trace_summary": {
-    "agent_name": "PatchDraftAssistant",
-    "model": "gpt-4.1-mini",
-    "latency_ms": 1680
-  }
-}
-```
-
-`POST /api/patches/apply` 请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "target_path": "backend/app/services/chat_service.py",
-  "expected_base_sha256": "9a8c...",
-  "proposed_content": "..."
-}
-```
-
-`POST /api/patches/apply-and-checks` 请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "target_path": "backend/app/services/chat_service.py",
-  "expected_base_sha256": "9a8c...",
-  "proposed_content": "...",
-  "profile_ids": ["backend_pytest", "frontend_npm-typecheck"]
-}
-```
-
-`POST /api/patches/apply-batch` 请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "items": [
-    {
-      "target_path": "backend/app/services/chat_service.py",
-      "expected_base_sha256": "9a8c...",
-      "proposed_content": "..."
-    },
-    {
-      "target_path": "frontend/components/checks/checks-panel.tsx",
-      "expected_base_sha256": "2f11...",
-      "proposed_content": "..."
-    }
-  ]
-}
-```
-
-返回结构：
-
-```json
-{
-  "repo_id": 1,
-  "status": "applied",
-  "message": "Applied 2 file(s) to the working tree successfully.",
-  "applied_count": 2,
-  "noop_count": 0,
-  "target_paths": [
-    "backend/app/services/chat_service.py",
-    "frontend/components/checks/checks-panel.tsx"
-  ],
-  "combined_unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ...",
-  "results": [
-    {
-      "repo_id": 1,
-      "target_path": "backend/app/services/chat_service.py",
-      "status": "applied",
-      "message": "The patch draft was written to the working tree successfully.",
-      "previous_sha256": "9a8c...",
-      "written_sha256": "3ab1...",
-      "written_line_count": 101,
-      "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ..."
-    }
-  ]
-}
-```
-
-返回结构：
-
-```json
-{
-  "patch": {
-    "repo_id": 1,
-    "target_path": "backend/app/services/chat_service.py",
-    "status": "applied",
-    "message": "The patch draft was written to the working tree successfully.",
-    "previous_sha256": "9a8c...",
-    "written_sha256": "2f11...",
-    "written_line_count": 101,
-    "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ..."
-  },
-  "checks": {
-    "repo_id": 1,
-    "status": "passed",
-    "summary": "Completed 2 checks successfully.",
-    "results": []
-  }
-}
-```
-
-说明补充：
-
-- `apply-and-checks` 会先校验 patch 基线，再写入工作区，最后运行选中的默认检查
-- `apply-batch-and-checks` 会先校验整批 patch 基线，再写入选中的文件，最后运行选中的默认检查
-- 如果 `profile_ids` 为空，会运行当前仓库下自动发现的全部白名单检查
-- 如果 `profile_ids` 非法，后端会在写入 patch 之前先拒绝请求，避免“文件已改但检查参数无效”的半完成状态
-
-`GET /api/checks/repositories/{repo_id}/profiles` 返回示例：
-
-```json
-{
-  "repo_id": 1,
-  "items": [
-    {
-      "id": "backend_pytest",
-      "name": "Pytest (backend)",
-      "category": "test",
-      "working_dir": "E:/repo/backend",
-      "command_preview": "python -m pytest tests"
-    },
-    {
-      "id": "frontend_npm-typecheck",
-      "name": "TypeScript Typecheck (frontend)",
-      "category": "typecheck",
-      "working_dir": "E:/repo/frontend",
-      "command_preview": "npm run typecheck"
-    }
-  ]
-}
-```
-
-`POST /api/checks/recommend` 请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "changed_paths": ["frontend/app/page.tsx"]
-}
-```
-
-返回结构：
-
-```json
-{
-  "repo_id": 1,
-  "changed_paths": ["frontend/app/page.tsx"],
-  "strategy": "matched",
-  "summary": "Recommended 2 checks based on 1 changed path(s).",
-  "items": [
-    {
-      "id": "frontend_npm-typecheck",
-      "name": "TypeScript Typecheck (frontend)",
-      "category": "typecheck",
-      "working_dir": "E:/repo/frontend",
-      "command_preview": "npm run typecheck",
-      "reason": "`frontend/app/page.tsx` is inside `frontend/`. Frontend file changes should run npm checks.",
-      "score": 10
-    }
-  ]
-}
-```
-
-`POST /api/checks/run` 请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "profile_ids": ["backend_pytest", "frontend_npm-typecheck"]
-}
-```
-
-返回结构：
-
-```json
-{
-  "repo_id": 1,
-  "status": "passed",
-  "summary": "Completed 2 checks successfully.",
-  "results": [
-    {
-      "id": "backend_pytest",
-      "name": "Pytest (backend)",
-      "category": "test",
-      "working_dir": "E:/repo/backend",
-      "command_preview": "python -m pytest tests",
-      "status": "passed",
-      "exit_code": 0,
-      "duration_ms": 820,
-      "stdout": "...",
-      "stderr": "",
-      "truncated": false
-    }
-  ]
-}
-```
-
-说明：
-
-- 当前只运行自动发现的白名单检查，不支持用户自定义任意命令
-- Python 侧目前优先识别 `python -m pytest tests`
-- Node 侧目前优先识别 `npm run typecheck`、`npm run lint`、`npm run test`
-- 推荐逻辑当前主要基于目标文件路径、目录范围和语言后缀，匹配不到时会回退到全部已发现检查
-- 输出过长时会截断，优先保证 API 响应稳定
-
-返回结构：
-
-```json
-{
-  "repo_id": 1,
-  "target_path": "backend/app/services/chat_service.py",
-  "status": "applied",
-  "message": "The patch draft was written to the working tree successfully.",
-  "previous_sha256": "9a8c...",
-  "written_sha256": "2f11...",
-  "written_line_count": 101,
-  "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ..."
-}
-```
-
-请求示例：
-
-```json
-{
-  "repo_id": 1,
-  "question": "这个仓库的索引流程是怎么工作的？"
-}
-```
-
-返回结构：
-
-```json
-{
-  "session_id": "b3dbf4...",
-  "answer": "## 结论\n...\n\n## 依据\n...",
-  "citations": [
-    {
-      "path": "backend/app/services/indexing_service.py",
-      "start_line": 12,
-      "end_line": 68,
-      "symbol": null,
-      "note": "这里是索引入口和 chunk 写入流程。",
-      "excerpt": "..."
-    }
-  ],
-  "trace_summary": {
-    "agent_name": "CodeAssistant",
-    "model": "gpt-4.1-mini",
-    "latency_ms": 1450,
-    "tool_call_count": 3,
-    "steps": [
-      {
-        "tool_name": "search_repo",
-        "args_summary": "query=indexing_service, limit=8",
-        "item_count": 2,
-        "summary": "Found 2 indexed chunk matches."
-      }
-    ]
-  }
-}
-```
-
-说明：
-
-- 当前问答能力只支持已经完成索引的本地仓库
-- Agent 会被要求至少调用一个工具后再回答
-- 如果证据不足，Agent 应明确说明不确定，而不是编造引用
-
-## 索引策略
-
-第二阶段采用最稳妥、最简单的可工作方案：
-
-- 只对本地仓库执行真实扫描
-- GitHub 仓库当前只保存元信息，不自动克隆
-- 忽略目录包括：`.git`、`node_modules`、`dist`、`build`、`.next`、`coverage`、`venv` 等
-- 跳过大于 `512 KB` 的文件
-- 跳过二进制文件和非 UTF-8 文本
-- 使用“固定行数窗口 + 重叠行数”的方式切分：
-  - 每个 chunk 最多 `80` 行
-  - 相邻 chunk 保留 `20` 行重叠
-
-这样设计的原因：
-
-- 实现简单，便于验证
-- 每个 chunk 天然带行号边界
-- 后续接入 embedding、rerank 或 AST 工具时不需要推翻当前结构
-
 ## 快速启动
 
-### 1. 准备环境变量
+### 环境要求
+
+- Python 3.12+
+- Node.js 20+
+- Git
+- OpenAI API Key
+
+### 1. 配置环境变量
 
 ```powershell
 Copy-Item .env.example .env
@@ -667,7 +135,12 @@ Copy-Item .env.example .env
 至少需要配置：
 
 - `OPENAI_API_KEY`
-- 可选：`CODE_AGENT_OPENAI_MODEL`，默认是 `gpt-4.1-mini`
+
+可选配置：
+
+- `CODE_AGENT_OPENAI_MODEL`
+- `CODE_AGENT_GIT_CLONE_TIMEOUT_SECONDS`
+- `CODE_AGENT_GIT_CLONE_DEPTH`
 
 ### 2. 启动后端
 
@@ -679,18 +152,10 @@ python -m pip install -e .[dev]
 uvicorn app.main:app --reload --port 8000
 ```
 
-访问：
+可访问：
 
 - Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Health: [http://localhost:8000/api/health](http://localhost:8000/api/health)
-
-GitHub 导入补充：
-
-- `POST /api/repositories` 在 `source_type=github` 时会调用本机 `git clone`
-- clone 目标目录默认是根目录下的 `repos/`
-- 如需调整 clone 超时或深度，可配置：
-  - `CODE_AGENT_GIT_CLONE_TIMEOUT_SECONDS`
-  - `CODE_AGENT_GIT_CLONE_DEPTH`
 
 ### 3. 启动前端
 
@@ -700,104 +165,152 @@ npm install
 npm run dev
 ```
 
-访问：
+可访问：
 
 - Frontend: [http://localhost:3000](http://localhost:3000)
 
-## 第二阶段验证
+### 4. 最小使用流程
 
-建议按下面顺序验证：
+1. 导入一个本地仓库或 GitHub 仓库
+2. 触发索引
+3. 在前端工作台发起代码问答
+4. 查看回答、引用和工具调用摘要
+5. 如需改动，生成 patch 草案并预览 diff
+6. 确认后应用 patch 并运行 checks
 
-1. 登记一个本地仓库：
+## 示例问答
 
-```json
-{
-  "source_type": "local",
-  "root_path": "E:\\AI Agent\\1Code Repository Agent"
-}
+下面是一个典型的使用方式：
+
+**问题**
+
+```text
+这个仓库的索引流程是怎么工作的？关键入口在哪里？
 ```
 
-2. 调用 `POST /api/repositories/{repo_id}/index`
-3. 调用 `GET /api/repositories/{repo_id}/index-status`
-4. 调用 `GET /api/repositories/{repo_id}/tree?depth=2`
-5. 调用 `GET /api/repositories/{repo_id}/chunks?limit=10`
-6. 调用工具调试接口，例如：
+**Agent 可能执行的工具链**
 
-```json
-POST /api/tools/search
-{
-  "repo_id": 1,
-  "query": "request_index"
-}
+```text
+1. search_repo(query="indexing")
+2. read_file(path="backend/app/services/indexing_service.py")
+3. read_file(path="backend/app/api/routes/repositories.py")
 ```
 
-```json
-POST /api/tools/read
-{
-  "repo_id": 1,
-  "path": "backend/app/api/routes/repositories.py",
-  "start_line": 1,
-  "end_line": 40
-}
+**回答示例**
+
+```text
+索引入口在 repositories 路由的 POST /api/repositories/{repo_id}/index。
+实际执行逻辑在 IndexingService.request_index：
+
+- 先解析仓库工作区根目录
+- 扫描文件并过滤无关目录/二进制文件
+- 按行切分文本文件为 chunk
+- 将 FileChunk 写入 SQLite
+- 更新 Repository 的状态和 primary_language
 ```
 
-```json
-POST /api/tools/find-symbol
-{
-  "repo_id": 1,
-  "name": "request_index"
-}
+**引用示例**
+
+```text
+- backend/app/api/routes/repositories.py:88
+- backend/app/services/indexing_service.py:17
 ```
 
-7. 打开前端首页，点击“触发索引”，确认能看到成功提示
-8. 在前端问答区选择一个已完成索引的本地仓库，提问并确认页面展示：
-   - 回答正文
-   - 引用列表
-   - 工具调用摘要
+这部分体现的不是“模型自己知道答案”，而是：
 
-## 测试
+- Agent 先调用工具找证据
+- 再基于证据组织回答
+- 最终把引用返回给用户
 
-后端测试命令：
+## 关键实现思路
 
-```powershell
-cd backend
-python -m pytest
-```
+### 1. 用统一工作区抽象屏蔽仓库来源差异
 
-当前测试覆盖：
+无论仓库来自本地路径还是 GitHub clone，系统最终都把它映射为一个可访问的 `root_path`。这样后续的索引、检索、问答、patch、checks 都可以复用同一套逻辑，而不需要为不同来源维护两套分支。
 
-- 健康检查接口
-- 仓库创建与列表
-- 文件树过滤
-- 索引写入与状态查询
-- 工具接口：目录树、检索、读文件、找符号
-- 问答接口：返回回答、引用，并写入 `ConversationTrace`
-- patch 草案接口：返回 unified diff 和完整草案内容
-- 多文件 patch 草案接口：返回 grouped diff 和逐文件草案内容
-- patch 应用接口：只在基线内容未变化时把草案写回工作区
-- 多文件 patch 应用接口：先做整批哈希校验，再批量写回并返回逐文件结果
-- checks 接口：发现并运行白名单 lint/test 命令，返回结果摘要
-- apply-and-checks 接口：把 patch 写回和检查执行串成一次请求
-- checks 推荐接口：按改动路径返回更相关的 checks 组合与原因
+### 2. 用轻量索引先建立可用的工程上下文
 
-## 设计取舍
+当前版本没有直接引入向量库，而是先采用最稳妥的基础方案：
 
-当前实现刻意保持简单：
+- 扫描文本文件
+- 忽略 `.git`、`node_modules`、`dist` 等目录
+- 按固定窗口和重叠行数切分 chunk
+- 将 chunk、路径、行号、语言等信息写入 SQLite
 
-- 索引同步执行，不引入任务队列
-- 不做 embedding，不引入向量库
-- 不做 GitHub 自动克隆
-- 不做 AST 级符号解析
-- 不做复杂权限和多用户设计
+这种设计实现成本低，但已经足够支持关键词检索、文件阅读、引用定位和下一阶段的语义增强。
 
-这让第二阶段能尽快形成可验证的索引基础层，后续新增工具时不需要返工核心数据结构。
+### 3. Agent 不直接“看全仓库”，而是通过工具受控访问
 
-## 下一阶段
+问答主流程的重点是工具化，而不是把整个仓库直接塞进 prompt。当前 Agent 通过以下工具访问代码：
 
-下一阶段建议优先实现：
+- `list_repo_tree`
+- `search_repo`
+- `read_file`
+- `find_symbol`
 
-1. 结合 diff 内容和失败历史，进一步优化 checks 推荐准确度
-2. 增加 benchmark 样例与问答评测
-3. 引入更稳妥的检索策略，例如 embedding 和 rerank
-4. 增加 checks 失败后的回滚建议与修复流
-5. 再考虑后台任务队列与更完整的导入审计
+这样做有三个好处：
+
+- 可追踪：知道模型到底读了什么
+- 可解释：可以把引用和调用摘要返回给用户
+- 可扩展：后续加入 AST、embedding、rerank 时不需要重写主流程
+
+### 4. Patch 流程强调“预览优先”
+
+改动能力分成几个清晰步骤：
+
+1. 生成 patch 草案
+2. 展示 unified diff
+3. 用户确认后再应用
+4. 应用后执行 checks
+
+这让系统更接近工程协作中的 code review，而不是“让模型直接改文件”。
+
+### 5. Checks 采用白名单策略
+
+当前闭环不是开放任意 Shell，而是只发现和执行安全白名单内的检查，例如：
+
+- `python -m pytest tests`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test`
+
+这既降低了执行风险，也让系统输出更可控。
+
+## 风险控制
+
+这个项目在设计上刻意保留了多层风险控制：
+
+- 工具受控：Agent 只能访问约定好的 search/read/tree/symbol 工具，不直接任意执行命令。
+- 路径约束：所有文件访问都要求停留在仓库根目录内，避免越界读取或写入。
+- 证据引用：回答不是只给结论，还返回路径与行号，便于人工复核。
+- Patch 预览：所有改动先生成草案和 diff，不直接静默落盘。
+- 哈希校验：应用 patch 前会校验文件基线哈希，避免覆盖已经变化的文件。
+- 批量写回保护：多文件 apply 采用先校验、后整体写入的策略，避免半成功状态。
+- 检查白名单：lint/test 只运行系统识别的安全命令，不开放任意命令执行。
+- 文件扫描限制：跳过超大文件、二进制文件和常见构建产物，降低索引噪声和性能风险。
+
+当前还没有完全覆盖的风险包括：
+
+- checks 失败后的自动回滚
+- 更细粒度的权限与多用户隔离
+- 更完善的导入审计与后台任务治理
+
+## 后续规划
+
+下一步的增强重点会放在“检索质量”和“生产化能力”两个方向：
+
+- 引入 embedding / rerank，提高跨文件语义检索效果
+- 加入 AST 或语言感知的 symbol 分析，提升定位精度
+- 将 checks 推荐从“按路径”升级为“结合 diff 内容和历史失败”
+- 增加 benchmark 数据与问答评测，形成更明确的效果反馈
+- 支持 checks 失败后的回滚建议与修复流
+- 进一步完善后台任务队列、导入审计和运行可观测性
+
+## 适合作品集展示的点
+
+如果把这个仓库作为作品集项目，它最值得被看到的不是“用了 AI”，而是它体现了下面几件事情：
+
+- 能把 LLM 系统设计成受控的工程工具，而不是黑盒聊天
+- 能把检索、证据、改动、验证串成完整产品链路
+- 能在功能推进时持续保留扩展性和风险边界
+- 能从 MVP 出发，逐步演进到更接近真实研发工作流的 Agent 系统
