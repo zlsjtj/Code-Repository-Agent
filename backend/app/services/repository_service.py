@@ -46,9 +46,6 @@ class RepositoryService:
             raise RepositoryValidationError("The repository root_path is missing or is no longer a directory.")
         return root
 
-    def resolve_local_root(self, repository: Repository) -> Path:
-        return self.resolve_repository_root(repository)
-
     def resolve_relative_path(self, repository: Repository, relative_path: str) -> Path:
         root = self.resolve_repository_root(repository)
         normalized = relative_path.strip().strip("/")

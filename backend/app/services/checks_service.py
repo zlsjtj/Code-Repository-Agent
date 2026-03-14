@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
-import sys
-from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from app.checks.discovery import CheckProfileDiscovery, ResolvedCheckProfile
+from app.checks.recommendation import PathBasedCheckRecommendation
 from app.core.config import get_settings
 from app.schemas.checks import (
-    CheckCategory,
     CheckExecutionResult,
     CheckProfileListResponse,
     CheckProfileRead,
@@ -24,49 +22,29 @@ from app.schemas.checks import (
 )
 from app.services.repository_service import RepositoryService, RepositoryValidationError
 
-ALLOWED_NPM_SCRIPTS: tuple[tuple[str, CheckCategory, str], ...] = (
-    ("typecheck", "typecheck", "TypeScript Typecheck"),
-    ("lint", "lint", "Lint"),
-    ("test", "test", "Test"),
-)
 logger = logging.getLogger(__name__)
-
-
-@dataclass(slots=True)
-class ResolvedCheckProfile:
-    id: str
-    name: str
-    category: CheckCategory
-    working_dir: Path
-    command: list[str]
-    command_preview: str
 
 
 class CheckService:
     def __init__(self, db: Session):
         self.db = db
         self.repository_service = RepositoryService(db)
+        self.discovery = CheckProfileDiscovery()
+        self.recommender = PathBasedCheckRecommendation()
 
     def list_profiles(self, repo_id: int) -> CheckProfileListResponse:
         repository = self.repository_service.get_repository(repo_id)
-        profiles = self._discover_profiles(repository.id)
+        root = self.repository_service.resolve_repository_root(repository)
+        profiles = self.discovery.discover(root)
         return CheckProfileListResponse(
             repo_id=repo_id,
-            items=[
-                CheckProfileRead(
-                    id=profile.id,
-                    name=profile.name,
-                    category=profile.category,
-                    working_dir=profile.working_dir.as_posix(),
-                    command_preview=profile.command_preview,
-                )
-                for profile in profiles
-            ],
+            items=[self._to_profile_read(profile) for profile in profiles],
         )
 
     def run_checks(self, payload: CheckRunRequest) -> CheckRunResponse:
         repository = self.repository_service.get_repository(payload.repo_id)
-        profiles = self._discover_profiles(repository.id)
+        root = self.repository_service.resolve_repository_root(repository)
+        profiles = self.discovery.discover(root)
         if not profiles:
             return CheckRunResponse(
                 repo_id=payload.repo_id,
@@ -118,7 +96,8 @@ class CheckService:
 
     def recommend_profiles(self, payload: CheckRecommendationRequest) -> CheckRecommendationResponse:
         repository = self.repository_service.get_repository(payload.repo_id)
-        profiles = self._discover_profiles(repository.id)
+        root = self.repository_service.resolve_repository_root(repository)
+        profiles = self.discovery.discover(root)
         normalized_paths = [self._normalize_repo_path(path) for path in payload.changed_paths if path.strip()]
 
         if not profiles:
@@ -138,11 +117,7 @@ class CheckService:
                 summary="No changed paths were provided, so all discovered checks are recommended.",
                 items=[
                     CheckRecommendationItem(
-                        id=profile.id,
-                        name=profile.name,
-                        category=profile.category,
-                        working_dir=profile.working_dir.as_posix(),
-                        command_preview=profile.command_preview,
+                        **self._to_profile_read(profile).model_dump(),
                         reason="No changed paths were provided.",
                         score=0,
                     )
@@ -150,10 +125,9 @@ class CheckService:
                 ],
             )
 
-        root = self.repository_service.resolve_repository_root(repository)
         scored: list[tuple[int, ResolvedCheckProfile, str]] = []
         for profile in profiles:
-            score, reason = self._score_profile(profile, normalized_paths, root=root)
+            score, reason = self.recommender.score(profile, normalized_paths, root=root)
             if score > 0:
                 scored.append((score, profile, reason))
 
@@ -165,11 +139,7 @@ class CheckService:
                 summary="No path-specific match was found, so all discovered checks are recommended.",
                 items=[
                     CheckRecommendationItem(
-                        id=profile.id,
-                        name=profile.name,
-                        category=profile.category,
-                        working_dir=profile.working_dir.as_posix(),
-                        command_preview=profile.command_preview,
+                        **self._to_profile_read(profile).model_dump(),
                         reason="No path-specific match was found.",
                         score=0,
                     )
@@ -180,11 +150,7 @@ class CheckService:
         scored.sort(key=lambda entry: (-entry[0], entry[1].id))
         items = [
             CheckRecommendationItem(
-                id=profile.id,
-                name=profile.name,
-                category=profile.category,
-                working_dir=profile.working_dir.as_posix(),
-                command_preview=profile.command_preview,
+                **self._to_profile_read(profile).model_dump(),
                 reason=reason,
                 score=score,
             )
@@ -197,77 +163,6 @@ class CheckService:
             summary=f"Recommended {len(items)} checks based on {len(normalized_paths)} changed path(s).",
             items=items,
         )
-
-    def _discover_profiles(self, repo_id: int) -> list[ResolvedCheckProfile]:
-        repository = self.repository_service.get_repository(repo_id)
-        root = self.repository_service.resolve_repository_root(repository)
-        candidate_dirs = [root]
-        for child_name in ("backend", "frontend"):
-            child_path = root / child_name
-            if child_path.is_dir():
-                candidate_dirs.append(child_path)
-
-        profiles: list[ResolvedCheckProfile] = []
-        seen_ids: set[str] = set()
-        for directory in candidate_dirs:
-            for profile in self._discover_python_profiles(root, directory):
-                if profile.id not in seen_ids:
-                    seen_ids.add(profile.id)
-                    profiles.append(profile)
-            for profile in self._discover_npm_profiles(root, directory):
-                if profile.id not in seen_ids:
-                    seen_ids.add(profile.id)
-                    profiles.append(profile)
-
-        return profiles
-
-    def _discover_python_profiles(self, root: Path, directory: Path) -> list[ResolvedCheckProfile]:
-        if not self._has_python_test_markers(directory):
-            return []
-
-        profile_id = self._profile_id(root, directory, suffix="pytest")
-        return [
-            ResolvedCheckProfile(
-                id=profile_id,
-                name=f"Pytest ({self._display_dir(root, directory)})",
-                category="test",
-                working_dir=directory,
-                command=[sys.executable, "-m", "pytest", "tests"],
-                command_preview=f"{Path(sys.executable).name} -m pytest tests",
-            )
-        ]
-
-    def _discover_npm_profiles(self, root: Path, directory: Path) -> list[ResolvedCheckProfile]:
-        package_json = directory / "package.json"
-        if not package_json.is_file():
-            return []
-
-        try:
-            payload = json.loads(package_json.read_text(encoding="utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return []
-
-        scripts = payload.get("scripts")
-        if not isinstance(scripts, dict):
-            return []
-
-        profiles: list[ResolvedCheckProfile] = []
-        for script_name, category, title in ALLOWED_NPM_SCRIPTS:
-            if script_name not in scripts:
-                continue
-            profile_id = self._profile_id(root, directory, suffix=f"npm-{script_name}")
-            profiles.append(
-                ResolvedCheckProfile(
-                    id=profile_id,
-                    name=f"{title} ({self._display_dir(root, directory)})",
-                    category=category,
-                    working_dir=directory,
-                    command=["npm", "run", script_name],
-                    command_preview=f"npm run {script_name}",
-                )
-            )
-
-        return profiles
 
     def _run_profile(self, profile: ResolvedCheckProfile) -> CheckExecutionResult:
         settings = get_settings()
@@ -335,73 +230,20 @@ class CheckService:
                 truncated=False,
             )
 
+    def _to_profile_read(self, profile: ResolvedCheckProfile) -> CheckProfileRead:
+        return CheckProfileRead(
+            id=profile.id,
+            name=profile.name,
+            category=profile.category,
+            working_dir=profile.working_dir.as_posix(),
+            command_preview=profile.command_preview,
+        )
+
     def _truncate_output(self, value: str) -> tuple[str, bool]:
         limit = get_settings().check_output_char_limit
         if len(value) <= limit:
             return value, False
         return value[:limit] + "\n...[truncated]", True
 
-    def _has_python_test_markers(self, directory: Path) -> bool:
-        return (
-            (directory / "tests").is_dir()
-            or (directory / "pytest.ini").is_file()
-            or (directory / "pyproject.toml").is_file()
-        )
-
-    def _profile_id(self, root: Path, directory: Path, *, suffix: str) -> str:
-        directory_token = self._display_dir(root, directory).replace("/", "_")
-        return f"{directory_token}_{suffix}"
-
-    def _display_dir(self, root: Path, directory: Path) -> str:
-        if directory == root:
-            return "root"
-        return directory.relative_to(root).as_posix()
-
     def _normalize_repo_path(self, value: str) -> str:
         return value.strip().strip("/").replace("\\", "/")
-
-    def _score_profile(
-        self,
-        profile: ResolvedCheckProfile,
-        changed_paths: list[str],
-        *,
-        root: Path,
-    ) -> tuple[int, str]:
-        profile_scope = self._display_dir(root, profile.working_dir)
-        score = 0
-        reasons: list[str] = []
-
-        for changed_path in changed_paths:
-            suffix = Path(changed_path).suffix.lower()
-            is_python_change = suffix == ".py"
-            is_frontend_change = suffix in {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".mjs", ".cjs"}
-
-            if profile_scope != "root" and (
-                changed_path == profile_scope or changed_path.startswith(f"{profile_scope}/")
-            ):
-                score += 6
-                reasons.append(f"`{changed_path}` is inside `{profile_scope}/`.")
-            elif profile_scope == "root" and "/" not in changed_path:
-                score += 2
-                reasons.append(f"`{changed_path}` is at the repository root.")
-
-            if profile.id.endswith("pytest") and is_python_change:
-                score += 3
-                reasons.append("Python file changes should run pytest.")
-
-            if "npm-" in profile.id and is_frontend_change:
-                score += 3
-                reasons.append("Frontend file changes should run npm checks.")
-                if profile.category == "typecheck" and suffix in {".ts", ".tsx"}:
-                    score += 1
-                    reasons.append("TypeScript file changes should run typecheck.")
-
-        if not reasons:
-            return 0, ""
-
-        deduped_reasons: list[str] = []
-        for reason in reasons:
-            if reason not in deduped_reasons:
-                deduped_reasons.append(reason)
-
-        return score, " ".join(deduped_reasons[:2])

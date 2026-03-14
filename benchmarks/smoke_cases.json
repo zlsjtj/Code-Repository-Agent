@@ -1,0 +1,33 @@
+[
+  {
+    "id": "indexing-flow",
+    "repo": "self",
+    "question": "这个项目的索引入口在哪里，索引时会做哪些事情？",
+    "expected_paths": [
+      "backend/app/api/routes/repositories.py",
+      "backend/app/services/indexing_service.py"
+    ],
+    "notes": "回答至少应覆盖 API 入口和 IndexingService。"
+  },
+  {
+    "id": "patch-safety",
+    "repo": "self",
+    "question": "patch 在应用到工作区前做了哪些保护？",
+    "expected_paths": [
+      "backend/app/services/patch_service.py",
+      "backend/app/schemas/patch.py"
+    ],
+    "notes": "回答应提到哈希校验和失败回滚。"
+  },
+  {
+    "id": "tooling-boundary",
+    "repo": "self",
+    "question": "Agent 现在能调用哪些代码检索工具？",
+    "expected_paths": [
+      "backend/app/agents/code_assistant.py",
+      "backend/app/tools/repository_tools.py",
+      "backend/app/services/retrieval_service.py"
+    ],
+    "notes": "回答应能列出 tree/search/read/symbol 这几类工具。"
+  }
+]
