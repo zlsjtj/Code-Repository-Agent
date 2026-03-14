@@ -2,22 +2,28 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-import type { PatchDraftResponse, RepositoryRecord } from "@/lib/types";
+import type { PatchApplyResponse, PatchDraftResponse, RepositoryRecord } from "@/lib/types";
 
 type PatchDraftPanelProps = {
   selectedRepository: RepositoryRecord | null;
   suggestedPath: string | null;
   isDrafting: boolean;
+  isApplying: boolean;
   onDraft: (repoId: number, targetPath: string, instruction: string) => Promise<void> | void;
+  onApply: (response: PatchDraftResponse) => Promise<void> | void;
   response: PatchDraftResponse | null;
+  applyResponse: PatchApplyResponse | null;
 };
 
 export function PatchDraftPanel({
   selectedRepository,
   suggestedPath,
   isDrafting,
+  isApplying,
   onDraft,
+  onApply,
   response,
+  applyResponse,
 }: PatchDraftPanelProps) {
   const [targetPath, setTargetPath] = useState("");
   const [instruction, setInstruction] = useState("在这个文件里做一个最小改动，并给我 unified diff 预览。");
@@ -162,6 +168,24 @@ export function PatchDraftPanel({
                 <span className="meta-pill">
                   {response.original_line_count} → {response.proposed_line_count} lines
                 </span>
+                <span className="meta-pill">base {response.base_content_sha256.slice(0, 8)}</span>
+              </div>
+            </div>
+            <div className="button-row patch-action-row">
+              <button
+                className="button-primary"
+                disabled={isApplying || !response.unified_diff || applyResponse?.status === "applied"}
+                onClick={() => onApply(response)}
+                type="button"
+              >
+                {applyResponse?.status === "applied"
+                  ? "已应用到工作区"
+                  : isApplying
+                    ? "应用中..."
+                    : "确认应用到工作区"}
+              </button>
+              <div className="field-help">
+                应用前会校验文件基线哈希；如果文件已经变化，后端会拒绝写入，避免覆盖未预览的新内容。
               </div>
             </div>
             {response.unified_diff ? (
@@ -193,6 +217,15 @@ export function PatchDraftPanel({
               </div>
             )}
           </div>
+
+          {applyResponse ? (
+            <div className="success-banner">
+              {applyResponse.message}
+              {applyResponse.status === "applied"
+                ? ` 已写入 ${applyResponse.target_path}，当前共 ${applyResponse.written_line_count} 行。`
+                : ""}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

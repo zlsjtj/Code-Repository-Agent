@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import os
 from pathlib import Path
 from time import perf_counter
@@ -11,7 +12,13 @@ from sqlalchemy.orm import Session
 
 from app.agents.patch_draft_agent import PatchDraftFinalOutput, build_patch_draft_agent
 from app.core.config import get_settings
-from app.schemas.patch import PatchDraftRequest, PatchDraftResponse, PatchDraftTraceSummary
+from app.schemas.patch import (
+    PatchApplyRequest,
+    PatchApplyResponse,
+    PatchDraftRequest,
+    PatchDraftResponse,
+    PatchDraftTraceSummary,
+)
 from app.services.repository_service import RepositoryService, RepositoryValidationError
 
 MAX_PATCH_FILE_CHARS = 20_000
@@ -20,6 +27,10 @@ MAX_PATCH_FILE_LINES = 500
 
 class PatchConfigurationError(ValueError):
     """Raised when the patch drafting runtime is not configured correctly."""
+
+
+class PatchConflictError(ValueError):
+    """Raised when a patch apply request is stale against the current file content."""
 
 
 class PatchService:
@@ -68,6 +79,7 @@ class PatchService:
             session_id=session_id,
             repo_id=payload.repo_id,
             target_path=payload.target_path.strip().strip("/"),
+            base_content_sha256=self._hash_content(original_content),
             summary=final_output.summary,
             rationale=final_output.rationale,
             warnings=warnings,
@@ -81,6 +93,51 @@ class PatchService:
                 model=settings.openai_model,
                 latency_ms=latency_ms,
             ),
+        )
+
+    def apply_patch(self, payload: PatchApplyRequest) -> PatchApplyResponse:
+        repository = self.repository_service.get_repository(payload.repo_id)
+        if repository.source_type != "local":
+            raise RepositoryValidationError("Patch apply is currently available only for local repositories.")
+
+        file_path, current_content = self._read_target_file(payload.repo_id, payload.target_path)
+        current_hash = self._hash_content(current_content)
+        if current_hash != payload.expected_base_sha256:
+            raise PatchConflictError(
+                "The target file changed since this draft was generated. Re-generate the patch draft before applying."
+            )
+
+        proposed_content = self._normalize_content(payload.proposed_content)
+        target_path = payload.target_path.strip().strip("/")
+        diff = self._build_unified_diff(
+            target_path=target_path,
+            original_content=current_content,
+            proposed_content=proposed_content,
+        )
+
+        if not diff:
+            return PatchApplyResponse(
+                repo_id=payload.repo_id,
+                target_path=target_path,
+                status="noop",
+                message="The proposed content already matches the current file. Nothing was written.",
+                previous_sha256=current_hash,
+                written_sha256=current_hash,
+                written_line_count=self._count_lines(current_content),
+                unified_diff=diff,
+            )
+
+        file_path.write_text(proposed_content, encoding="utf-8")
+        written_hash = self._hash_content(proposed_content)
+        return PatchApplyResponse(
+            repo_id=payload.repo_id,
+            target_path=target_path,
+            status="applied",
+            message="The patch draft was written to the working tree successfully.",
+            previous_sha256=current_hash,
+            written_sha256=written_hash,
+            written_line_count=self._count_lines(proposed_content),
+            unified_diff=diff,
         )
 
     async def _run_agent(self, *, prompt: str, model: str) -> tuple[PatchDraftFinalOutput, str]:
@@ -160,3 +217,6 @@ class PatchService:
         if normalized and not normalized.endswith("\n"):
             normalized += "\n"
         return normalized
+
+    def _hash_content(self, content: str) -> str:
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()

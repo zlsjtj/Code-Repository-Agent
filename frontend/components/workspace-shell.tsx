@@ -9,6 +9,7 @@ import { PatchDraftPanel } from "@/components/patches/patch-draft-panel";
 import { RepositoryImportForm } from "@/components/repositories/repository-import-form";
 import { RepositoryList } from "@/components/repositories/repository-list";
 import {
+  applyPatchDraft,
   askRepositoryQuestion,
   createPatchDraft,
   createRepository,
@@ -21,6 +22,7 @@ import type {
   ChatAskResponse,
   HealthResponse,
   MetaResponse,
+  PatchApplyResponse,
   PatchDraftResponse,
   RepositoryCreatePayload,
   RepositoryIndexResponse,
@@ -34,6 +36,7 @@ export function WorkspaceShell() {
   const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
   const [chatResponse, setChatResponse] = useState<ChatAskResponse | null>(null);
   const [patchResponse, setPatchResponse] = useState<PatchDraftResponse | null>(null);
+  const [patchApplyResponse, setPatchApplyResponse] = useState<PatchApplyResponse | null>(null);
   const [chatHistory, setChatHistory] = useState<WorkspaceChatEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -41,6 +44,7 @@ export function WorkspaceShell() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
   const [isDraftingPatch, setIsDraftingPatch] = useState(false);
+  const [isApplyingPatch, setIsApplyingPatch] = useState(false);
   const [indexingRepoId, setIndexingRepoId] = useState<number | null>(null);
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
   const [activeChatRepoId, setActiveChatRepoId] = useState<number | null>(null);
@@ -116,6 +120,12 @@ export function WorkspaceShell() {
 
   useEffect(() => {
     setPatchResponse((current) => {
+      if (!current) {
+        return current;
+      }
+      return current.repo_id === selectedRepoId ? current : null;
+    });
+    setPatchApplyResponse((current) => {
       if (!current) {
         return current;
       }
@@ -210,12 +220,34 @@ export function WorkspaceShell() {
         target_path: targetPath,
       });
       setPatchResponse(response);
+      setPatchApplyResponse(null);
       setSelectedRepoId(repoId);
       setStatusMessage(`patch 草案已生成：${response.target_path}`);
     } catch (draftError) {
       setError(draftError instanceof Error ? draftError.message : "Unable to draft the patch.");
     } finally {
       setIsDraftingPatch(false);
+    }
+  }
+
+  async function handleApplyPatch(draft: PatchDraftResponse) {
+    setIsApplyingPatch(true);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await applyPatchDraft({
+        expected_base_sha256: draft.base_content_sha256,
+        proposed_content: draft.proposed_content,
+        repo_id: draft.repo_id,
+        target_path: draft.target_path,
+      });
+      setPatchApplyResponse(response);
+      setStatusMessage(`patch 已写入工作区：${response.target_path}`);
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : "Unable to apply the patch.");
+    } finally {
+      setIsApplyingPatch(false);
     }
   }
 
@@ -229,10 +261,10 @@ export function WorkspaceShell() {
   return (
     <main className="page-shell">
       <section className="hero-card">
-        <p className="eyebrow">Stage 6 Patch Drafts</p>
+        <p className="eyebrow">Stage 7 Safe Apply</p>
         <h1 className="hero-title">代码库问答与改动助手</h1>
         <p className="hero-copy">
-          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据、最近会话和 patch 草案预览整理进一个连续工作台，便于我们围绕同一份代码库持续分析和准备改动。
+          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据、最近会话、patch 草案预览和安全写回流程整理进一个连续工作台，便于我们围绕同一份代码库持续分析和准备改动。
         </p>
         <div className="hero-badges">
           {meta?.features?.map((feature) => (
@@ -335,7 +367,10 @@ export function WorkspaceShell() {
             selectedRepoId={selectedRepoId}
           />
           <PatchDraftPanel
+            applyResponse={patchApplyResponse}
+            isApplying={isApplyingPatch}
             isDrafting={isDraftingPatch}
+            onApply={handleApplyPatch}
             onDraft={handleDraftPatch}
             response={patchResponse}
             selectedRepository={selectedRepository}

@@ -504,6 +504,10 @@ select {
   color: var(--warning);
 }
 
+.patch-action-row {
+  align-items: center;
+}
+
 .diff-preview {
   margin-top: 12px;
   border-radius: 16px;

@@ -1,4 +1,6 @@
 import type {
+  PatchApplyPayload,
+  PatchApplyResponse,
   ChatAskPayload,
   ChatAskResponse,
   HealthResponse,
@@ -71,6 +73,13 @@ export function askRepositoryQuestion(payload: ChatAskPayload) {
 
 export function createPatchDraft(payload: PatchDraftPayload) {
   return request<PatchDraftResponse>("/api/patches/draft", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function applyPatchDraft(payload: PatchApplyPayload) {
+  return request<PatchApplyResponse>("/api/patches/apply", {
     body: JSON.stringify(payload),
     method: "POST",
   });

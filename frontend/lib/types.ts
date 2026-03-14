@@ -112,6 +112,7 @@ export type PatchDraftResponse = {
   session_id: string;
   repo_id: number;
   target_path: string;
+  base_content_sha256: string;
   summary: string;
   rationale: string;
   warnings: string[];
@@ -121,4 +122,22 @@ export type PatchDraftResponse = {
   unified_diff: string;
   proposed_content: string;
   trace_summary: PatchDraftTraceSummary;
+};
+
+export type PatchApplyPayload = {
+  repo_id: number;
+  target_path: string;
+  expected_base_sha256: string;
+  proposed_content: string;
+};
+
+export type PatchApplyResponse = {
+  repo_id: number;
+  target_path: string;
+  status: "applied" | "noop";
+  message: string;
+  previous_sha256: string;
+  written_sha256: string;
+  written_line_count: number;
+  unified_diff: string;
 };
