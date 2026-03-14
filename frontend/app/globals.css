@@ -510,6 +510,29 @@ select {
   align-items: center;
 }
 
+.diff-card.is-selected {
+  border-color: rgba(31, 93, 80, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(31, 93, 80, 0.1);
+}
+
+.selection-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.selection-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.selection-toggle.is-disabled {
+  opacity: 0.72;
+}
+
 .top-gap {
   margin-top: 18px;
 }
@@ -526,6 +549,11 @@ select {
   border-radius: 18px;
   border: 1px solid rgba(31, 93, 80, 0.18);
   background: rgba(31, 93, 80, 0.06);
+}
+
+.patch-result-list {
+  display: grid;
+  gap: 12px;
 }
 
 .diff-output {

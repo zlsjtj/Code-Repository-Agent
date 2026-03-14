@@ -10,6 +10,8 @@ import { PatchDraftPanel } from "@/components/patches/patch-draft-panel";
 import { RepositoryImportForm } from "@/components/repositories/repository-import-form";
 import { RepositoryList } from "@/components/repositories/repository-list";
 import {
+  applyPatchBatchAndRunChecks,
+  applyPatchDraftBatch,
   applyPatchAndRunChecks,
   applyPatchDraft,
   askRepositoryQuestion,
@@ -31,6 +33,9 @@ import type {
   ChatAskResponse,
   HealthResponse,
   MetaResponse,
+  PatchDraftFile,
+  PatchBatchApplyAndCheckResponse,
+  PatchBatchApplyResponse,
   PatchBatchDraftResponse,
   PatchApplyAndCheckResponse,
   PatchApplyResponse,
@@ -49,6 +54,7 @@ export function WorkspaceShell() {
   const [patchResponse, setPatchResponse] = useState<PatchDraftResponse | null>(null);
   const [patchBatchResponse, setPatchBatchResponse] = useState<PatchBatchDraftResponse | null>(null);
   const [patchApplyResponse, setPatchApplyResponse] = useState<PatchApplyResponse | null>(null);
+  const [patchBatchApplyResponse, setPatchBatchApplyResponse] = useState<PatchBatchApplyResponse | null>(null);
   const [checkProfiles, setCheckProfiles] = useState<CheckProfile[]>([]);
   const [checkRecommendation, setCheckRecommendation] = useState<CheckRecommendationResponse | null>(null);
   const [checkResponse, setCheckResponse] = useState<CheckRunResponse | null>(null);
@@ -62,7 +68,9 @@ export function WorkspaceShell() {
   const [isAsking, setIsAsking] = useState(false);
   const [isDraftingPatch, setIsDraftingPatch] = useState(false);
   const [isApplyingPatch, setIsApplyingPatch] = useState(false);
+  const [isApplyingBatchPatch, setIsApplyingBatchPatch] = useState(false);
   const [isApplyingAndChecking, setIsApplyingAndChecking] = useState(false);
+  const [isApplyingBatchAndChecking, setIsApplyingBatchAndChecking] = useState(false);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [indexingRepoId, setIndexingRepoId] = useState<number | null>(null);
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
@@ -151,6 +159,12 @@ export function WorkspaceShell() {
       return current.repo_id === selectedRepoId ? current : null;
     });
     setPatchApplyResponse((current) => {
+      if (!current) {
+        return current;
+      }
+      return current.repo_id === selectedRepoId ? current : null;
+    });
+    setPatchBatchApplyResponse((current) => {
       if (!current) {
         return current;
       }
@@ -371,6 +385,7 @@ export function WorkspaceShell() {
       }
 
       setPatchApplyResponse(null);
+      setPatchBatchApplyResponse(null);
       setCheckRecommendation(null);
       setCheckResponse(null);
       setSelectedRepoId(repoId);
@@ -428,6 +443,67 @@ export function WorkspaceShell() {
     }
   }
 
+  async function handleApplyPatchBatch(repoId: number, drafts: PatchDraftFile[]) {
+    if (drafts.length === 0) {
+      return;
+    }
+
+    setIsApplyingBatchPatch(true);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await applyPatchDraftBatch({
+        items: drafts.map((draft) => ({
+          expected_base_sha256: draft.base_content_sha256,
+          proposed_content: draft.proposed_content,
+          target_path: draft.target_path,
+        })),
+        repo_id: repoId,
+      });
+      setPatchApplyResponse(null);
+      setPatchBatchApplyResponse(response);
+      setStatusMessage(`批量 patch 已完成：${response.message}`);
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : "Unable to apply the batch patch.");
+    } finally {
+      setIsApplyingBatchPatch(false);
+    }
+  }
+
+  async function handleApplyPatchBatchAndRunChecks(repoId: number, drafts: PatchDraftFile[]) {
+    if (drafts.length === 0) {
+      return;
+    }
+
+    setIsApplyingBatchAndChecking(true);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response: PatchBatchApplyAndCheckResponse = await applyPatchBatchAndRunChecks({
+        items: drafts.map((draft) => ({
+          expected_base_sha256: draft.base_content_sha256,
+          proposed_content: draft.proposed_content,
+          target_path: draft.target_path,
+        })),
+        profile_ids:
+          checkRecommendation && checkRecommendation.items.length > 0
+            ? checkRecommendation.items.map((item) => item.id)
+            : undefined,
+        repo_id: repoId,
+      });
+      setPatchApplyResponse(null);
+      setPatchBatchApplyResponse(response.patch);
+      setCheckResponse(response.checks);
+      setStatusMessage(`批量 patch 已写入并完成检查：${response.checks.summary}`);
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : "Unable to apply and verify the batch patch.");
+    } finally {
+      setIsApplyingBatchAndChecking(false);
+    }
+  }
+
   async function handleRunChecks(profileIds?: string[]) {
     if (!selectedRepository) {
       return;
@@ -461,10 +537,10 @@ export function WorkspaceShell() {
   return (
     <main className="page-shell">
       <section className="hero-card">
-        <p className="eyebrow">Stage 11 Multi-File Drafts</p>
+        <p className="eyebrow">Stage 12 Multi-File Apply</p>
         <h1 className="hero-title">代码库问答与改动助手</h1>
         <p className="hero-copy">
-          当前阶段已经把单文件 patch 草案扩展成多文件分组预览：我们现在可以围绕同一份仓库连续问答、查看引用、起草单文件或多文件改动、按推荐 checks 验证，并继续保留单文件安全写回闭环。
+          当前阶段已经把多文件 patch 从“只预览”推进到了“可逐项确认后安全批量应用”：现在不仅能分组看 diff，还能对选中的文件做 all-or-nothing 写回，并继续挂上推荐 checks 做验证。
         </p>
         <div className="hero-badges">
           {meta?.features?.map((feature) => (
@@ -568,12 +644,17 @@ export function WorkspaceShell() {
           />
           <PatchDraftPanel
             applyResponse={patchApplyResponse}
+            batchApplyResponse={patchBatchApplyResponse}
             batchResponse={patchBatchResponse}
             isApplying={isApplyingPatch}
+            isApplyingBatch={isApplyingBatchPatch}
+            isApplyingBatchAndChecking={isApplyingBatchAndChecking}
             isApplyingAndChecking={isApplyingAndChecking}
             isDrafting={isDraftingPatch}
             recommendedCheckCount={checkRecommendation?.items.length ?? 0}
             onApply={handleApplyPatch}
+            onApplyBatch={handleApplyPatchBatch}
+            onApplyBatchAndCheck={handleApplyPatchBatchAndRunChecks}
             onApplyAndCheck={handleApplyPatchAndRunChecks}
             onDraft={handleDraftPatch}
             response={patchResponse}

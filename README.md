@@ -1,6 +1,6 @@
 # 代码库问答与改动助手（AI Agent）
 
-面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经推进到第十一阶段，并把工作台继续扩展到了“支持多文件 patch 草案分组预览”：
+面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经推进到第十二阶段，并把工作台继续扩展到了“支持多文件 patch 的逐项确认与安全批量应用”：
 
 - 第一阶段：项目骨架、FastAPI、Next.js、SQLite schema、健康检查、仓库导入
 - 第二阶段：本地仓库扫描、文件树接口、基础 chunk 索引、索引状态与调试查询
@@ -13,6 +13,7 @@
 - 第九阶段：把 patch 应用与 checks 运行编排成一个一键闭环，减少手动切换和重复操作
 - 第十阶段：根据 patch 目标路径自动推荐 checks 组合，让 apply-and-verify 更贴近真实改动范围
 - 第十一阶段：支持多文件 patch 草案批量预览，按文件返回 grouped diff，并把推荐 checks 自动扩展到多路径改动
+- 第十二阶段：支持多文件 patch 的勾选确认、all-or-nothing 批量写回，以及批量 apply 后运行 checks
 
 项目目标不是做一个“会聊天的网页”，而是做一个“能围绕代码任务调用工具、引用证据、逐步扩展到改动建议和检查闭环”的代码助手。
 
@@ -34,6 +35,7 @@
 - 在前端页面内保留最近会话，支持切回历史回答继续查看引用
 - 生成单文件 patch 草案，并在前端直接预览 unified diff
 - 一次为多个目标文件生成 patch 草案预览，并按文件分组查看 diff
+- 勾选多文件 patch 草案中的目标项，并做 all-or-nothing 批量写回
 - 把确认过的 patch 草案安全写回本地工作区，并避免覆盖已变化的文件
 - 自动发现并运行安全白名单内的 lint/test 检查，直接返回 stdout / stderr 摘要
 - 一键完成 patch 写回和默认 checks 验证，并把结果汇总回工作台
@@ -42,7 +44,7 @@
 当前仍未实现：
 
 - GitHub 仓库克隆
-- 多文件 patch 的直接写回与原子 apply-and-checks
+- checks 失败后的自动回滚
 - 更细粒度地结合 diff 内容、语言和目录结构推荐 checks
 - 语义检索、rerank 和 AST 级符号定位增强
 - benchmark 样例、系统化评测和 trace 可视化
@@ -146,6 +148,7 @@
 - 页面内最近会话历史切换
 - Patch 草案表单与 diff 预览
 - 多文件 patch 草案输入与 grouped diff 预览
+- 多文件 patch 结果勾选与批量应用
 - Checks 面板与结果摘要
 - 一键应用并验证入口
 - 推荐 checks 展示与一键使用入口
@@ -256,7 +259,9 @@
 - `POST /api/patches/draft`
 - `POST /api/patches/draft-batch`
 - `POST /api/patches/apply`
+- `POST /api/patches/apply-batch`
 - `POST /api/patches/apply-and-checks`
+- `POST /api/patches/apply-batch-and-checks`
 
 ### Checks 接口
 
@@ -306,9 +311,10 @@
 - `draft` 只处理单个现有文本文件
 - `draft-batch` 支持一次预览多个现有文本文件，默认上限 `5` 个文件
 - `draft` 返回的是预览结果，不会自动把文件写回工作区
-- `draft-batch` 当前只返回 grouped diff 预览，不会直接写回多个文件
+- `draft-batch` 返回 grouped diff 预览，前端可以在此基础上勾选要落地的文件
 - `apply` 会在写入前校验 `base_content_sha256`，只有目标文件仍与草案基线一致时才会真正写入
-- 当前安全写回闭环仍保持单文件粒度，多文件 apply 还没有开放
+- `apply-batch` 会先校验整批选中文件的基线哈希，全部通过后才开始写回；任意一个文件冲突都会整批拒绝
+- `apply-batch-and-checks` 会在批量写回后运行选中的 checks，但当前不会因为 checks 失败而自动回滚文件
 - 文件大小默认限制在 `500` 行、`20,000` 字符以内，优先保证草案稳定性
 
 `POST /api/patches/draft-batch` 请求示例：
@@ -391,6 +397,55 @@
 }
 ```
 
+`POST /api/patches/apply-batch` 请求示例：
+
+```json
+{
+  "repo_id": 1,
+  "items": [
+    {
+      "target_path": "backend/app/services/chat_service.py",
+      "expected_base_sha256": "9a8c...",
+      "proposed_content": "..."
+    },
+    {
+      "target_path": "frontend/components/checks/checks-panel.tsx",
+      "expected_base_sha256": "2f11...",
+      "proposed_content": "..."
+    }
+  ]
+}
+```
+
+返回结构：
+
+```json
+{
+  "repo_id": 1,
+  "status": "applied",
+  "message": "Applied 2 file(s) to the working tree successfully.",
+  "applied_count": 2,
+  "noop_count": 0,
+  "target_paths": [
+    "backend/app/services/chat_service.py",
+    "frontend/components/checks/checks-panel.tsx"
+  ],
+  "combined_unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ...",
+  "results": [
+    {
+      "repo_id": 1,
+      "target_path": "backend/app/services/chat_service.py",
+      "status": "applied",
+      "message": "The patch draft was written to the working tree successfully.",
+      "previous_sha256": "9a8c...",
+      "written_sha256": "3ab1...",
+      "written_line_count": 101,
+      "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ..."
+    }
+  ]
+}
+```
+
 返回结构：
 
 ```json
@@ -417,6 +472,7 @@
 说明补充：
 
 - `apply-and-checks` 会先校验 patch 基线，再写入工作区，最后运行选中的默认检查
+- `apply-batch-and-checks` 会先校验整批 patch 基线，再写入选中的文件，最后运行选中的默认检查
 - 如果 `profile_ids` 为空，会运行当前仓库下自动发现的全部白名单检查
 - 如果 `profile_ids` 非法，后端会在写入 patch 之前先拒绝请求，避免“文件已改但检查参数无效”的半完成状态
 
@@ -710,6 +766,7 @@ python -m pytest
 - patch 草案接口：返回 unified diff 和完整草案内容
 - 多文件 patch 草案接口：返回 grouped diff 和逐文件草案内容
 - patch 应用接口：只在基线内容未变化时把草案写回工作区
+- 多文件 patch 应用接口：先做整批哈希校验，再批量写回并返回逐文件结果
 - checks 接口：发现并运行白名单 lint/test 命令，返回结果摘要
 - apply-and-checks 接口：把 patch 写回和检查执行串成一次请求
 - checks 推荐接口：按改动路径返回更相关的 checks 组合与原因
@@ -730,8 +787,8 @@ python -m pytest
 
 下一阶段建议优先实现：
 
-1. 把多文件 patch 预览扩展成逐项确认和更稳妥的批量 apply 流程
-2. 结合 diff 内容和失败历史，进一步优化 checks 推荐准确度
-3. 增加 benchmark 样例与问答评测
-4. 引入更稳妥的检索策略，例如 embedding 和 rerank
+1. 结合 diff 内容和失败历史，进一步优化 checks 推荐准确度
+2. 增加 benchmark 样例与问答评测
+3. 引入更稳妥的检索策略，例如 embedding 和 rerank
+4. 增加 checks 失败后的回滚建议与修复流
 5. 再考虑 GitHub 自动克隆与后台任务队列

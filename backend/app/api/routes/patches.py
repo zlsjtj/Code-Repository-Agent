@@ -7,6 +7,10 @@ from app.schemas.patch import (
     PatchApplyAndCheckResponse,
     PatchApplyRequest,
     PatchApplyResponse,
+    PatchBatchApplyAndCheckRequest,
+    PatchBatchApplyAndCheckResponse,
+    PatchBatchApplyRequest,
+    PatchBatchApplyResponse,
     PatchBatchDraftRequest,
     PatchBatchDraftResponse,
     PatchDraftRequest,
@@ -62,6 +66,22 @@ def apply_patch(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+@router.post("/apply-batch", response_model=PatchBatchApplyResponse)
+def apply_patch_batch(
+    payload: PatchBatchApplyRequest,
+    db: Session = Depends(get_db),
+) -> PatchBatchApplyResponse:
+    service = PatchService(db)
+    try:
+        return service.apply_patch_batch(payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (RepositoryValidationError, PatchConfigurationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.post("/apply-and-checks", response_model=PatchApplyAndCheckResponse)
 def apply_patch_and_run_checks(
     payload: PatchApplyAndCheckRequest,
@@ -70,6 +90,22 @@ def apply_patch_and_run_checks(
     service = PatchService(db)
     try:
         return service.apply_patch_and_run_checks(payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (RepositoryValidationError, PatchConfigurationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/apply-batch-and-checks", response_model=PatchBatchApplyAndCheckResponse)
+def apply_patch_batch_and_run_checks(
+    payload: PatchBatchApplyAndCheckRequest,
+    db: Session = Depends(get_db),
+) -> PatchBatchApplyAndCheckResponse:
+    service = PatchService(db)
+    try:
+        return service.apply_patch_batch_and_run_checks(payload)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except PatchConflictError as exc:

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import type {
   PatchApplyResponse,
+  PatchBatchApplyResponse,
   PatchBatchDraftResponse,
   PatchDraftFile,
   PatchDraftResponse,
@@ -15,14 +16,19 @@ type PatchDraftPanelProps = {
   suggestedPath: string | null;
   isDrafting: boolean;
   isApplying: boolean;
+  isApplyingBatch: boolean;
   isApplyingAndChecking: boolean;
+  isApplyingBatchAndChecking: boolean;
   recommendedCheckCount: number;
   onDraft: (repoId: number, targetPaths: string[], instruction: string) => Promise<void> | void;
   onApply: (response: PatchDraftResponse) => Promise<void> | void;
+  onApplyBatch: (repoId: number, drafts: PatchDraftFile[]) => Promise<void> | void;
+  onApplyBatchAndCheck: (repoId: number, drafts: PatchDraftFile[]) => Promise<void> | void;
   onApplyAndCheck: (response: PatchDraftResponse) => Promise<void> | void;
   response: PatchDraftResponse | null;
   batchResponse: PatchBatchDraftResponse | null;
   applyResponse: PatchApplyResponse | null;
+  batchApplyResponse: PatchBatchApplyResponse | null;
 };
 
 function parseTargetPaths(input: string): string[] {
@@ -74,9 +80,31 @@ function DiffPreview({ diff }: { diff: string }) {
   );
 }
 
-function PatchDraftFileCard({ item }: { item: PatchDraftFile }) {
+function PatchDraftFileCard({
+  item,
+  isSelected,
+  onToggleSelected,
+}: {
+  item: PatchDraftFile;
+  isSelected?: boolean;
+  onToggleSelected?: (targetPath: string) => void;
+}) {
+  const isSelectable = typeof onToggleSelected === "function";
+  const isDiffFree = !item.unified_diff;
+
   return (
-    <div className="diff-card">
+    <div className={`diff-card ${isSelectable && isSelected ? "is-selected" : ""}`.trim()}>
+      {isSelectable ? (
+        <label className={`selection-toggle ${isDiffFree ? "is-disabled" : ""}`.trim()}>
+          <input
+            checked={Boolean(isSelected)}
+            disabled={isDiffFree}
+            onChange={() => onToggleSelected?.(item.target_path)}
+            type="checkbox"
+          />
+          <span>{isDiffFree ? "无可应用 diff" : "包含到批量应用"}</span>
+        </label>
+      ) : null}
       <div className="answer-header">
         <div className="answer-label">{item.target_path}</div>
         <div className="meta-pill-row">
@@ -118,19 +146,25 @@ export function PatchDraftPanel({
   suggestedPath,
   isDrafting,
   isApplying,
+  isApplyingBatch,
   isApplyingAndChecking,
+  isApplyingBatchAndChecking,
   recommendedCheckCount,
   onDraft,
   onApply,
+  onApplyBatch,
+  onApplyBatchAndCheck,
   onApplyAndCheck,
   response,
   batchResponse,
   applyResponse,
+  batchApplyResponse,
 }: PatchDraftPanelProps) {
   const [targetPathsInput, setTargetPathsInput] = useState("");
   const [instruction, setInstruction] = useState(
     "请围绕这些目标文件做最小必要改动，并返回清晰的 unified diff 预览。",
   );
+  const [selectedBatchPaths, setSelectedBatchPaths] = useState<string[]>([]);
 
   useEffect(() => {
     setTargetPathsInput("");
@@ -142,7 +176,30 @@ export function PatchDraftPanel({
     }
   }, [suggestedPath, targetPathsInput]);
 
+  useEffect(() => {
+    if (!batchResponse) {
+      setSelectedBatchPaths([]);
+      return;
+    }
+
+    setSelectedBatchPaths(
+      batchResponse.items
+        .filter((item) => item.unified_diff)
+        .map((item) => item.target_path),
+    );
+  }, [batchResponse]);
+
   const parsedTargetPaths = parseTargetPaths(targetPathsInput);
+  const selectedBatchDrafts =
+    batchResponse?.items.filter((item) => selectedBatchPaths.includes(item.target_path)) ?? [];
+
+  function toggleBatchSelection(targetPath: string) {
+    setSelectedBatchPaths((current) =>
+      current.includes(targetPath)
+        ? current.filter((item) => item !== targetPath)
+        : [...current, targetPath],
+    );
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -201,7 +258,7 @@ export function PatchDraftPanel({
             />
           </label>
           <p className="field-help">
-            一行一个路径。单文件时可以继续走安全应用和 apply-and-checks；多文件时当前只生成预览，不直接写回工作区。
+            一行一个路径。单文件时继续走原来的安全应用流程；多文件时会先给出 grouped diff，并支持勾选后批量写回。
           </p>
 
           {suggestedPath ? (
@@ -379,7 +436,7 @@ export function PatchDraftPanel({
             </div>
             <div className="patch-copy">{batchResponse.summary}</div>
             <div className="patch-rationale">
-              这一步先解决“多文件一起预览”的问题；真正写回和 apply-and-check 仍保持单文件安全流，避免一次请求直接覆盖多处工作区内容。
+              这一步除了 grouped diff 预览，还支持在下方逐项勾选要落地的文件。批量 apply 会先统一校验所有基线哈希，再开始写回；其中任意一个文件冲突，整批都会拒绝，避免半成功状态。
             </div>
           </div>
 
@@ -395,11 +452,46 @@ export function PatchDraftPanel({
 
           <div className="focus-card">
             <div className="focus-card-label">批量预览模式</div>
-            <div className="focus-card-title">先统一看 diff，再决定是否逐个应用</div>
+            <div className="focus-card-title">先统一看 diff，再决定要应用哪些文件</div>
             <div className="focus-card-copy">
               {recommendedCheckCount > 0
                 ? `这批改动已经拿到 ${recommendedCheckCount} 个推荐 checks，可以直接在下方 Checks 面板运行。`
                 : "这批改动已经进入推荐 checks 流程；如果没有命中更具体的规则，下方 Checks 面板会回退到全部已发现检查。"}
+            </div>
+            <div className="meta-pill-row top-gap">
+              <span className="meta-pill">selected {selectedBatchDrafts.length}</span>
+              <span className="meta-pill">changed {batchResponse.changed_file_count}</span>
+              <span className="meta-pill">
+                {batchResponse.total_original_line_count} to {batchResponse.total_proposed_line_count} lines
+              </span>
+            </div>
+          </div>
+
+          <div className="button-row patch-action-row">
+            <button
+              className="button-primary"
+              disabled={isApplyingBatch || isApplyingBatchAndChecking || selectedBatchDrafts.length === 0}
+              onClick={() => onApplyBatch(batchResponse.repo_id, selectedBatchDrafts)}
+              type="button"
+            >
+              {isApplyingBatch
+                ? "批量应用中..."
+                : `应用选中文件 (${selectedBatchDrafts.length})`}
+            </button>
+            <button
+              className="button-secondary"
+              disabled={isApplyingBatch || isApplyingBatchAndChecking || selectedBatchDrafts.length === 0}
+              onClick={() => onApplyBatchAndCheck(batchResponse.repo_id, selectedBatchDrafts)}
+              type="button"
+            >
+              {isApplyingBatchAndChecking
+                ? "批量应用并验证中..."
+                : recommendedCheckCount > 0
+                  ? `应用选中文件并运行推荐检查 (${recommendedCheckCount})`
+                  : "应用选中文件并运行默认检查"}
+            </button>
+            <div className="field-help">
+              选中文件会作为一个批次整体提交。后端会先完成全量哈希校验，再执行写回；如果某个文件已经变化，会整批拒绝。
             </div>
           </div>
 
@@ -417,8 +509,38 @@ export function PatchDraftPanel({
             </div>
           ) : null}
 
+          {batchApplyResponse ? (
+            <div className="answer-card">
+              <div className="answer-header">
+                <div className="answer-label">批量应用结果</div>
+                <div className="meta-pill-row">
+                  <span className="meta-pill">{batchApplyResponse.status}</span>
+                  <span className="meta-pill">applied {batchApplyResponse.applied_count}</span>
+                  <span className="meta-pill">noop {batchApplyResponse.noop_count}</span>
+                </div>
+              </div>
+              <div className="patch-copy">{batchApplyResponse.message}</div>
+              <div className="patch-result-list top-gap">
+                {batchApplyResponse.results.map((result) => (
+                  <div className="check-profile-card" key={result.target_path}>
+                    <div className="answer-header">
+                      <div className="answer-label">{result.target_path}</div>
+                      <span className="meta-pill">{result.status}</span>
+                    </div>
+                    <div className="patch-rationale">{result.message}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {batchResponse.items.map((item) => (
-            <PatchDraftFileCard item={item} key={item.target_path} />
+            <PatchDraftFileCard
+              isSelected={selectedBatchPaths.includes(item.target_path)}
+              item={item}
+              key={item.target_path}
+              onToggleSelected={toggleBatchSelection}
+            />
           ))}
         </div>
       ) : null}

@@ -61,11 +61,14 @@ class PatchBatchDraftResponse(BaseModel):
     trace_summary: PatchDraftTraceSummary
 
 
-class PatchApplyRequest(BaseModel):
-    repo_id: int
+class PatchApplyFile(BaseModel):
     target_path: str = Field(min_length=1)
     expected_base_sha256: str = Field(min_length=8)
     proposed_content: str
+
+
+class PatchApplyRequest(PatchApplyFile):
+    repo_id: int
 
 
 class PatchApplyResponse(BaseModel):
@@ -79,14 +82,38 @@ class PatchApplyResponse(BaseModel):
     unified_diff: str
 
 
-class PatchApplyAndCheckRequest(BaseModel):
+class PatchBatchApplyRequest(BaseModel):
     repo_id: int
-    target_path: str = Field(min_length=1)
-    expected_base_sha256: str = Field(min_length=8)
-    proposed_content: str
+    items: list[PatchApplyFile] = Field(min_length=1)
+
+
+class PatchBatchApplyResponse(BaseModel):
+    repo_id: int
+    status: Literal["applied", "noop"]
+    message: str
+    applied_count: int
+    noop_count: int
+    target_paths: list[str]
+    combined_unified_diff: str
+    results: list[PatchApplyResponse]
+
+
+class PatchApplyAndCheckRequest(PatchApplyFile):
+    repo_id: int
     profile_ids: list[str] | None = Field(default=None)
 
 
 class PatchApplyAndCheckResponse(BaseModel):
     patch: PatchApplyResponse
+    checks: CheckRunResponse
+
+
+class PatchBatchApplyAndCheckRequest(BaseModel):
+    repo_id: int
+    items: list[PatchApplyFile] = Field(min_length=1)
+    profile_ids: list[str] | None = Field(default=None)
+
+
+class PatchBatchApplyAndCheckResponse(BaseModel):
+    patch: PatchBatchApplyResponse
     checks: CheckRunResponse

@@ -156,6 +156,12 @@ export type PatchApplyPayload = {
   proposed_content: string;
 };
 
+export type PatchApplyItemPayload = {
+  target_path: string;
+  expected_base_sha256: string;
+  proposed_content: string;
+};
+
 export type PatchApplyResponse = {
   repo_id: number;
   target_path: string;
@@ -167,11 +173,33 @@ export type PatchApplyResponse = {
   unified_diff: string;
 };
 
+export type PatchBatchApplyPayload = {
+  repo_id: number;
+  items: PatchApplyItemPayload[];
+};
+
+export type PatchBatchApplyResponse = {
+  repo_id: number;
+  status: "applied" | "noop";
+  message: string;
+  applied_count: number;
+  noop_count: number;
+  target_paths: string[];
+  combined_unified_diff: string;
+  results: PatchApplyResponse[];
+};
+
 export type PatchApplyAndCheckPayload = {
   repo_id: number;
   target_path: string;
   expected_base_sha256: string;
   proposed_content: string;
+  profile_ids?: string[];
+};
+
+export type PatchBatchApplyAndCheckPayload = {
+  repo_id: number;
+  items: PatchApplyItemPayload[];
   profile_ids?: string[];
 };
 
@@ -237,5 +265,10 @@ export type CheckRunResponse = {
 
 export type PatchApplyAndCheckResponse = {
   patch: PatchApplyResponse;
+  checks: CheckRunResponse;
+};
+
+export type PatchBatchApplyAndCheckResponse = {
+  patch: PatchBatchApplyResponse;
   checks: CheckRunResponse;
 };

@@ -36,6 +36,7 @@ def get_meta() -> MetaResponse:
             "patch_draft_preview",
             "multi_file_patch_draft",
             "patch_apply",
+            "multi_file_patch_apply",
             "checks_runner",
             "apply_and_verify",
             "checks_recommendation",

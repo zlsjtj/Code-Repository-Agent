@@ -1,4 +1,8 @@
 import type {
+  PatchBatchApplyAndCheckPayload,
+  PatchBatchApplyAndCheckResponse,
+  PatchBatchApplyPayload,
+  PatchBatchApplyResponse,
   PatchBatchDraftPayload,
   PatchBatchDraftResponse,
   CheckProfileListResponse,
@@ -101,8 +105,22 @@ export function applyPatchDraft(payload: PatchApplyPayload) {
   });
 }
 
+export function applyPatchDraftBatch(payload: PatchBatchApplyPayload) {
+  return request<PatchBatchApplyResponse>("/api/patches/apply-batch", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
 export function applyPatchAndRunChecks(payload: PatchApplyAndCheckPayload) {
   return request<PatchApplyAndCheckResponse>("/api/patches/apply-and-checks", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function applyPatchBatchAndRunChecks(payload: PatchBatchApplyAndCheckPayload) {
+  return request<PatchBatchApplyAndCheckResponse>("/api/patches/apply-batch-and-checks", {
     body: JSON.stringify(payload),
     method: "POST",
   });

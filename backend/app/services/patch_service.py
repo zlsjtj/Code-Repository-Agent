@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
@@ -16,8 +17,13 @@ from app.schemas.checks import CheckRunRequest
 from app.schemas.patch import (
     PatchApplyAndCheckRequest,
     PatchApplyAndCheckResponse,
+    PatchApplyFile,
     PatchApplyRequest,
     PatchApplyResponse,
+    PatchBatchApplyAndCheckRequest,
+    PatchBatchApplyAndCheckResponse,
+    PatchBatchApplyRequest,
+    PatchBatchApplyResponse,
     PatchBatchDraftRequest,
     PatchBatchDraftResponse,
     PatchDraftFile,
@@ -39,6 +45,17 @@ class PatchConfigurationError(ValueError):
 
 class PatchConflictError(ValueError):
     """Raised when a patch apply request is stale against the current file content."""
+
+
+@dataclass
+class PreparedPatchApply:
+    repo_id: int
+    target_path: str
+    file_path: Path
+    current_content: str
+    current_hash: str
+    proposed_content: str
+    unified_diff: str
 
 
 class PatchService:
@@ -119,49 +136,22 @@ class PatchService:
         )
 
     def apply_patch(self, payload: PatchApplyRequest) -> PatchApplyResponse:
-        repository = self.repository_service.get_repository(payload.repo_id)
-        if repository.source_type != "local":
-            raise RepositoryValidationError("Patch apply is currently available only for local repositories.")
-
-        file_path, current_content = self._read_target_file(payload.repo_id, payload.target_path)
-        current_hash = self._hash_content(current_content)
-        if current_hash != payload.expected_base_sha256:
-            raise PatchConflictError(
-                "The target file changed since this draft was generated. Re-generate the patch draft before applying."
-            )
-
-        proposed_content = self._normalize_content(payload.proposed_content)
-        target_path = payload.target_path.strip().strip("/")
-        diff = self._build_unified_diff(
-            target_path=target_path,
-            original_content=current_content,
-            proposed_content=proposed_content,
+        prepared_items = self._prepare_patch_apply_items(
+            payload.repo_id,
+            [
+                PatchApplyFile(
+                    target_path=payload.target_path,
+                    expected_base_sha256=payload.expected_base_sha256,
+                    proposed_content=payload.proposed_content,
+                )
+            ],
         )
+        return self._write_prepared_patches(prepared_items)[0]
 
-        if not diff:
-            return PatchApplyResponse(
-                repo_id=payload.repo_id,
-                target_path=target_path,
-                status="noop",
-                message="The proposed content already matches the current file. Nothing was written.",
-                previous_sha256=current_hash,
-                written_sha256=current_hash,
-                written_line_count=self._count_lines(current_content),
-                unified_diff=diff,
-            )
-
-        file_path.write_text(proposed_content, encoding="utf-8")
-        written_hash = self._hash_content(proposed_content)
-        return PatchApplyResponse(
-            repo_id=payload.repo_id,
-            target_path=target_path,
-            status="applied",
-            message="The patch draft was written to the working tree successfully.",
-            previous_sha256=current_hash,
-            written_sha256=written_hash,
-            written_line_count=self._count_lines(proposed_content),
-            unified_diff=diff,
-        )
+    def apply_patch_batch(self, payload: PatchBatchApplyRequest) -> PatchBatchApplyResponse:
+        prepared_items = self._prepare_patch_apply_items(payload.repo_id, payload.items)
+        results = self._write_prepared_patches(prepared_items)
+        return self._build_batch_apply_response(payload.repo_id, results)
 
     def apply_patch_and_run_checks(
         self,
@@ -181,6 +171,26 @@ class PatchService:
             CheckRunRequest(repo_id=payload.repo_id, profile_ids=payload.profile_ids)
         )
         return PatchApplyAndCheckResponse(
+            patch=patch_result,
+            checks=check_result,
+        )
+
+    def apply_patch_batch_and_run_checks(
+        self,
+        payload: PatchBatchApplyAndCheckRequest,
+    ) -> PatchBatchApplyAndCheckResponse:
+        self._validate_check_profile_selection(payload.repo_id, payload.profile_ids)
+
+        patch_result = self.apply_patch_batch(
+            PatchBatchApplyRequest(
+                repo_id=payload.repo_id,
+                items=payload.items,
+            )
+        )
+        check_result = self.check_service.run_checks(
+            CheckRunRequest(repo_id=payload.repo_id, profile_ids=payload.profile_ids)
+        )
+        return PatchBatchApplyAndCheckResponse(
             patch=patch_result,
             checks=check_result,
         )
@@ -309,6 +319,131 @@ class PatchService:
             )
 
         return normalized_paths, warnings
+
+    def _prepare_patch_apply_items(
+        self,
+        repo_id: int,
+        items: list[PatchApplyFile],
+    ) -> list[PreparedPatchApply]:
+        repository = self.repository_service.get_repository(repo_id)
+        if repository.source_type != "local":
+            raise RepositoryValidationError("Patch apply is currently available only for local repositories.")
+
+        prepared_items: list[PreparedPatchApply] = []
+        seen_paths: set[str] = set()
+
+        for item in items:
+            normalized_target_path = item.target_path.strip().strip("/")
+            if normalized_target_path in seen_paths:
+                raise RepositoryValidationError(
+                    f"Duplicate target path is not allowed in a batch apply request: {normalized_target_path}."
+                )
+            seen_paths.add(normalized_target_path)
+
+            file_path, current_content = self._read_target_file_from_repository(repository, normalized_target_path)
+            current_hash = self._hash_content(current_content)
+            if current_hash != item.expected_base_sha256:
+                raise PatchConflictError(
+                    f"The target file changed since this draft was generated: {normalized_target_path}. "
+                    "Re-generate the patch draft before applying."
+                )
+
+            proposed_content = self._normalize_content(item.proposed_content)
+            unified_diff = self._build_unified_diff(
+                target_path=normalized_target_path,
+                original_content=current_content,
+                proposed_content=proposed_content,
+            )
+            prepared_items.append(
+                PreparedPatchApply(
+                    repo_id=repo_id,
+                    target_path=normalized_target_path,
+                    file_path=file_path,
+                    current_content=current_content,
+                    current_hash=current_hash,
+                    proposed_content=proposed_content,
+                    unified_diff=unified_diff,
+                )
+            )
+
+        return prepared_items
+
+    def _write_prepared_patches(self, prepared_items: list[PreparedPatchApply]) -> list[PatchApplyResponse]:
+        rollback_snapshots: list[tuple[Path, str]] = []
+        results: list[PatchApplyResponse] = []
+
+        try:
+            for prepared in prepared_items:
+                if not prepared.unified_diff:
+                    results.append(
+                        PatchApplyResponse(
+                            repo_id=prepared.repo_id,
+                            target_path=prepared.target_path,
+                            status="noop",
+                            message="The proposed content already matches the current file. Nothing was written.",
+                            previous_sha256=prepared.current_hash,
+                            written_sha256=prepared.current_hash,
+                            written_line_count=self._count_lines(prepared.current_content),
+                            unified_diff=prepared.unified_diff,
+                        )
+                    )
+                    continue
+
+                prepared.file_path.write_text(prepared.proposed_content, encoding="utf-8")
+                rollback_snapshots.append((prepared.file_path, prepared.current_content))
+                written_hash = self._hash_content(prepared.proposed_content)
+                results.append(
+                    PatchApplyResponse(
+                        repo_id=prepared.repo_id,
+                        target_path=prepared.target_path,
+                        status="applied",
+                        message="The patch draft was written to the working tree successfully.",
+                        previous_sha256=prepared.current_hash,
+                        written_sha256=written_hash,
+                        written_line_count=self._count_lines(prepared.proposed_content),
+                        unified_diff=prepared.unified_diff,
+                    )
+                )
+        except OSError as exc:
+            for file_path, original_content in reversed(rollback_snapshots):
+                file_path.write_text(original_content, encoding="utf-8")
+            raise RepositoryValidationError(
+                "Failed to apply the requested patch set cleanly. Any earlier file writes were rolled back."
+            ) from exc
+
+        return results
+
+    def _build_batch_apply_response(
+        self,
+        repo_id: int,
+        results: list[PatchApplyResponse],
+    ) -> PatchBatchApplyResponse:
+        applied_count = sum(1 for item in results if item.status == "applied")
+        noop_count = len(results) - applied_count
+        status = "applied" if applied_count > 0 else "noop"
+        target_paths = [item.target_path for item in results]
+        combined_unified_diff = "\n\n".join(item.unified_diff for item in results if item.unified_diff)
+
+        if applied_count > 0 and noop_count > 0:
+            message = (
+                f"Applied {applied_count} file(s) successfully. "
+                f"{noop_count} file(s) already matched the proposed content."
+            )
+        elif applied_count > 0:
+            message = f"Applied {applied_count} file(s) to the working tree successfully."
+        else:
+            message = "All selected files already matched the proposed content. Nothing was written."
+
+        return PatchBatchApplyResponse(
+            repo_id=repo_id,
+            status=status,
+            message=message,
+            applied_count=applied_count,
+            noop_count=noop_count,
+            target_paths=target_paths,
+            combined_unified_diff=combined_unified_diff,
+            results=results,
+        )
 
     def _build_prompt(
         self,
