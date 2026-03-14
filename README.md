@@ -1,17 +1,32 @@
 # 代码库问答与改动助手（AI Agent）
 
-面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。第一阶段先完成项目骨架搭建：FastAPI 后端、Next.js 前端、SQLite schema、健康检查接口和仓库导入占位接口，为后续的索引、检索、Agent 工具调用、patch 草案和 lint/test 闭环预留清晰扩展点。
+面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已完成前两阶段的最小可运行版本：
 
-## 当前阶段
+- 第一阶段：项目骨架、FastAPI、Next.js、SQLite schema、健康检查、仓库导入
+- 第二阶段：本地仓库扫描、文件树接口、基础 chunk 索引、索引状态与调试查询
 
-当前仓库已完成第一阶段骨架：
+项目目标不是做一个“会聊天的网页”，而是做一个“能围绕代码任务调用工具、引用证据、逐步扩展到改动建议和检查闭环”的代码助手。
 
-- 严格按项目说明书建议创建目录结构
-- 搭建 FastAPI 后端基础结构
-- 搭建 Next.js 前端基础结构
-- 定义 SQLite 数据模型：`Repository`、`FileChunk`、`ConversationTrace`
-- 提供健康检查 API、基础元信息 API、仓库导入占位接口、索引触发占位接口
-- 预留 `agents/`、`tools/`、`indexing/` 目录，暂不实现复杂 Agent 逻辑
+## 当前进度
+
+当前仓库已经支持：
+
+- 登记本地仓库路径
+- 保存 GitHub 仓库元信息
+- 扫描本地仓库文件树
+- 过滤常见无关目录、二进制文件和超大文件
+- 按行切分文本文件并写入 `FileChunk`
+- 查询索引状态
+- 查询部分 chunk，便于调试下一阶段检索工具
+- 在前端工作台直接触发索引
+
+当前仍未实现：
+
+- GitHub 仓库克隆
+- 关键词检索 / 语义检索
+- `read_file` / `find_symbol`
+- OpenAI Agents SDK 问答主流程
+- patch 草案、diff 预览、lint/test 闭环
 
 ## 项目目录
 
@@ -29,6 +44,8 @@
 │  │  │  ├─ config.py
 │  │  │  └─ db.py
 │  │  ├─ indexing/
+│  │  │  ├─ chunker.py
+│  │  │  └─ scanner.py
 │  │  ├─ models/
 │  │  │  ├─ repository.py
 │  │  │  ├─ file_chunk.py
@@ -47,19 +64,8 @@
 │  └─ README.md
 ├─ frontend/
 │  ├─ app/
-│  │  ├─ globals.css
-│  │  ├─ layout.tsx
-│  │  ├─ page.tsx
-│  │  └─ repositories/
-│  │     └─ page.tsx
 │  ├─ components/
-│  │  ├─ chat/
-│  │  ├─ citations/
-│  │  ├─ repositories/
-│  │  └─ workspace-shell.tsx
 │  ├─ lib/
-│  │  ├─ api.ts
-│  │  └─ types.ts
 │  ├─ public/
 │  ├─ next.config.mjs
 │  ├─ package.json
@@ -72,19 +78,31 @@
 └─ README.md
 ```
 
-## 第一阶段已实现能力
+## 已实现能力
 
 ### 后端
 
 - FastAPI 应用入口与统一路由注册
 - 基于 SQLite 的 SQLAlchemy 数据库初始化
-- `Repository`、`FileChunk`、`ConversationTrace` 三张核心表
-- 仓库登记服务：
-  - 本地仓库路径校验
-  - GitHub 仓库元信息登记
-  - 列表查询与详情查询
-- 索引触发占位服务：
-  - 仅返回“第二阶段实现”的占位响应
+- 三张核心表：
+  - `Repository`
+  - `FileChunk`
+  - `ConversationTrace`
+- 仓库服务：
+  - 本地路径校验
+  - GitHub 元信息登记
+  - 仓库列表 / 详情查询
+- 基础索引服务：
+  - 文件树扫描
+  - 忽略目录过滤
+  - 二进制文件过滤
+  - 超大文件过滤
+  - 行级 chunk 切分
+  - 主语言粗略统计
+- 调试型查询接口：
+  - 文件树
+  - 索引状态
+  - chunk 列表
 
 ### 前端
 
@@ -93,7 +111,8 @@
 - 后端健康状态探测
 - 仓库导入表单
 - 已登记仓库列表
-- 问答面板与引用面板占位区
+- 触发索引按钮
+- 问答区与引用区占位
 
 ## 数据模型
 
@@ -114,7 +133,7 @@
 
 ### `FileChunk`
 
-为第二阶段文件扫描与切分预留。
+保存切分后的代码片段，为后续检索和引用提供基础。
 
 - `id`
 - `repo_id`
@@ -130,7 +149,7 @@
 
 ### `ConversationTrace`
 
-为后续问答 trace、工具调用记录和引用链路预留。
+为后续问答 trace、工具调用和引用链路预留。
 
 - `id`
 - `session_id`
@@ -144,38 +163,50 @@
 
 ## API
 
-当前已实现的接口：
+### 基础
 
 - `GET /api/health`
-  - 返回服务健康状态
-
 - `GET /api/meta`
-  - 返回应用名称、版本和当前阶段能力开关
 
-- `GET /api/repositories`
-  - 返回已登记仓库列表
+### 仓库管理
 
 - `POST /api/repositories`
-  - 登记本地仓库路径或 GitHub 仓库元信息
-
+- `GET /api/repositories`
 - `GET /api/repositories/{repo_id}`
-  - 返回单个仓库详情
 
+### 索引与调试
+
+- `GET /api/repositories/{repo_id}/tree`
 - `POST /api/repositories/{repo_id}/index`
-  - 索引触发占位接口
-  - 当前只返回提示信息，不执行扫描或切分
+- `GET /api/repositories/{repo_id}/index-status`
+- `GET /api/repositories/{repo_id}/chunks`
+
+## 索引策略
+
+第二阶段采用最稳妥、最简单的可工作方案：
+
+- 只对本地仓库执行真实扫描
+- GitHub 仓库当前只保存元信息，不自动克隆
+- 忽略目录包括：`.git`、`node_modules`、`dist`、`build`、`.next`、`coverage`、`venv` 等
+- 跳过大于 `512 KB` 的文件
+- 跳过二进制文件和非 UTF-8 文本
+- 使用“固定行数窗口 + 重叠行数”的方式切分：
+  - 每个 chunk 最多 `80` 行
+  - 相邻 chunk 保留 `20` 行重叠
+
+这样设计的原因：
+
+- 实现简单，便于验证
+- 每个 chunk 天然带行号边界
+- 后续接入 embedding、rerank 或 AST 工具时不需要推翻当前结构
 
 ## 快速启动
 
 ### 1. 准备环境变量
 
-在仓库根目录复制环境变量模板：
-
 ```powershell
 Copy-Item .env.example .env
 ```
-
-默认配置会把 SQLite 放在 `data/` 下，把后续导入仓库放在 `repos/` 下。
 
 ### 2. 启动后端
 
@@ -187,14 +218,12 @@ python -m pip install -e .[dev]
 uvicorn app.main:app --reload --port 8000
 ```
 
-启动后可访问：
+访问：
 
 - Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Health: [http://localhost:8000/api/health](http://localhost:8000/api/health)
 
 ### 3. 启动前端
-
-新开一个终端：
 
 ```powershell
 cd frontend
@@ -202,25 +231,15 @@ npm install
 npm run dev
 ```
 
-启动后可访问：
+访问：
 
 - Frontend: [http://localhost:3000](http://localhost:3000)
 
-## 第一阶段验证
+## 第二阶段验证
 
 建议按下面顺序验证：
 
-1. 访问 `GET /api/health`，确认返回 `status=ok`
-2. 打开 `http://localhost:8000/docs`，调用 `POST /api/repositories`
-3. 用本地目录测试一个 `local` 类型导入
-4. 再调用 `GET /api/repositories`，确认记录已写入 SQLite
-5. 打开前端首页，确认能看到：
-   - 后端健康状态
-   - 能力开关
-   - 仓库导入表单
-   - 仓库记录列表
-
-本地仓库导入示例：
+1. 登记一个本地仓库：
 
 ```json
 {
@@ -229,19 +248,15 @@ npm run dev
 }
 ```
 
-GitHub 仓库元信息示例：
-
-```json
-{
-  "source_type": "github",
-  "source_url": "https://github.com/example/repo",
-  "default_branch": "main"
-}
-```
+2. 调用 `POST /api/repositories/{repo_id}/index`
+3. 调用 `GET /api/repositories/{repo_id}/index-status`
+4. 调用 `GET /api/repositories/{repo_id}/tree?depth=2`
+5. 调用 `GET /api/repositories/{repo_id}/chunks?limit=10`
+6. 打开前端首页，点击“触发索引”，确认能看到成功提示
 
 ## 测试
 
-后端已预留基础测试：
+后端测试命令：
 
 ```powershell
 cd backend
@@ -251,26 +266,29 @@ python -m pytest
 当前测试覆盖：
 
 - 健康检查接口
-- 本地仓库导入与列表接口
+- 仓库创建与列表
+- 文件树过滤
+- 索引写入与状态查询
 
 ## 设计取舍
 
-第一阶段刻意保持简单：
+当前实现刻意保持简单：
 
-- 只做仓库登记，不做真实克隆
-- 只做 schema 和占位服务，不做真实文件扫描
-- 只预留 `agents/`、`tools/`、`indexing/`，不提前堆复杂抽象
-- 只做工作台首页，不提前做复杂会话流和状态管理
+- 索引同步执行，不引入任务队列
+- 不做 embedding，不引入向量库
+- 不做 GitHub 自动克隆
+- 不做 AST 级符号解析
+- 不做复杂权限和多用户设计
 
-这样做的目的是先把项目骨架、目录边界和基础数据契约定稳，再进入下一阶段。
+这让第二阶段能尽快形成可验证的索引基础层，后续新增工具时不需要返工核心数据结构。
 
 ## 下一阶段
 
-第二阶段建议优先实现：
+第三阶段建议优先实现：
 
-1. 仓库文件树扫描
-2. 过滤规则与 chunk 切分
-3. `FileChunk` 写入 SQLite
-4. `GET /repositories/{repo_id}/tree`
-5. `POST /repositories/{repo_id}/index` 从占位接口升级为真实索引入口
+1. `search_repo`
+2. `read_file`
+3. `find_symbol`
+4. 统一工具返回结构
+5. 为 OpenAI Agents SDK 问答主流程准备工具层
 

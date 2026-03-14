@@ -2,6 +2,7 @@ import type {
   HealthResponse,
   MetaResponse,
   RepositoryCreatePayload,
+  RepositoryIndexResponse,
   RepositoryListResponse,
   RepositoryRecord,
 } from "@/lib/types";
@@ -51,3 +52,8 @@ export function createRepository(payload: RepositoryCreatePayload) {
   });
 }
 
+export function indexRepository(repoId: number) {
+  return request<RepositoryIndexResponse>(`/api/repositories/${repoId}/index`, {
+    method: "POST",
+  });
+}

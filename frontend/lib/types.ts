@@ -31,6 +31,15 @@ export type RepositoryListResponse = {
   items: RepositoryRecord[];
 };
 
+export type RepositoryIndexResponse = {
+  repo_id: number;
+  status: RepositoryStatus;
+  message: string;
+  file_count: number;
+  chunk_count: number;
+  skipped_file_count: number;
+};
+
 export type RepositoryCreatePayload = {
   name?: string;
   source_type: RepositorySourceType;
@@ -38,4 +47,3 @@ export type RepositoryCreatePayload = {
   source_url?: string;
   default_branch?: string;
 };
-

@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -9,6 +10,7 @@ backend/.venv/
 # Node / Next.js
 frontend/node_modules/
 frontend/.next/
+*.tsbuildinfo
 
 # Local environment
 .env
@@ -20,4 +22,3 @@ data/*
 !data/.gitkeep
 repos/*
 !repos/.gitkeep
-

@@ -3,11 +3,15 @@ import type { RepositoryRecord } from "@/lib/types";
 type RepositoryListProps = {
   repositories: RepositoryRecord[];
   isLoading: boolean;
+  indexingRepoId: number | null;
+  onIndex: (repoId: number) => Promise<void> | void;
 };
 
 export function RepositoryList({
   repositories,
   isLoading,
+  indexingRepoId,
+  onIndex,
 }: RepositoryListProps) {
   return (
     <section className="panel-card">
@@ -39,6 +43,16 @@ export function RepositoryList({
               <div className="repo-meta">
                 source_type={repository.source_type}
                 {repository.default_branch ? ` | default_branch=${repository.default_branch}` : ""}
+              </div>
+              <div className="button-row">
+                <button
+                  className="button-secondary"
+                  disabled={indexingRepoId === repository.id}
+                  onClick={() => onIndex(repository.id)}
+                  type="button"
+                >
+                  {indexingRepoId === repository.id ? "索引中..." : "触发索引"}
+                </button>
               </div>
             </article>
           ))}

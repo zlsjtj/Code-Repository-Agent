@@ -295,6 +295,15 @@ select {
   color: var(--warning);
 }
 
+.success-banner {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(31, 93, 80, 0.22);
+  background: rgba(31, 93, 80, 0.08);
+  color: var(--accent);
+}
+
 .placeholder-list {
   display: grid;
   gap: 12px;
@@ -323,4 +332,3 @@ select {
     border-radius: 20px;
   }
 }
-

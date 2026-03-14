@@ -25,6 +25,17 @@ class RepositoryService:
             raise LookupError(f"Repository {repo_id} was not found.")
         return repository
 
+    def resolve_local_root(self, repository: Repository) -> Path:
+        if repository.source_type != "local" or not repository.root_path:
+            raise RepositoryValidationError(
+                "Only local repositories with an available root_path can be scanned in this stage."
+            )
+
+        root = Path(repository.root_path).expanduser().resolve()
+        if not root.exists() or not root.is_dir():
+            raise RepositoryValidationError("The repository root_path is missing or is no longer a directory.")
+        return root
+
     def create_repository(self, payload: RepositoryCreate) -> Repository:
         root_path: str | None = None
         source_url = str(payload.source_url) if payload.source_url else None
@@ -52,4 +63,3 @@ class RepositoryService:
         self.db.commit()
         self.db.refresh(repository)
         return repository
-

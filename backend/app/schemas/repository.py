@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 RepositorySourceType = Literal["local", "github"]
 RepositoryStatus = Literal["pending", "ready", "indexing", "failed"]
@@ -46,4 +48,49 @@ class RepositoryIndexResponse(BaseModel):
     repo_id: int
     status: RepositoryStatus
     message: str
+    file_count: int = 0
+    chunk_count: int = 0
+    skipped_file_count: int = 0
 
+
+class RepositoryIndexStatusResponse(BaseModel):
+    repo_id: int
+    status: RepositoryStatus
+    primary_language: str | None
+    file_count: int
+    chunk_count: int
+    updated_at: datetime
+
+
+class RepositoryTreeNode(BaseModel):
+    name: str
+    path: str
+    node_type: Literal["file", "directory"]
+    children: list["RepositoryTreeNode"] = Field(default_factory=list)
+
+
+class RepositoryTreeResponse(BaseModel):
+    repo_id: int
+    root_path: str
+    path: str
+    depth: int
+    nodes: list[RepositoryTreeNode]
+
+
+class FileChunkRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    repo_id: int
+    path: str
+    language: str | None
+    chunk_index: int
+    start_line: int
+    end_line: int
+    text: str
+    hash: str | None
+    created_at: datetime
+
+
+class FileChunkListResponse(BaseModel):
+    items: list[FileChunkRead]

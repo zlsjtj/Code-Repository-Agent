@@ -6,11 +6,12 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { CitationPanel } from "@/components/citations/citation-panel";
 import { RepositoryImportForm } from "@/components/repositories/repository-import-form";
 import { RepositoryList } from "@/components/repositories/repository-list";
-import { createRepository, fetchHealth, fetchMeta, listRepositories } from "@/lib/api";
+import { createRepository, fetchHealth, fetchMeta, indexRepository, listRepositories } from "@/lib/api";
 import type {
   HealthResponse,
   MetaResponse,
   RepositoryCreatePayload,
+  RepositoryIndexResponse,
   RepositoryRecord,
 } from "@/lib/types";
 
@@ -19,8 +20,10 @@ export function WorkspaceShell() {
   const [meta, setMeta] = useState<MetaResponse | null>(null);
   const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [indexingRepoId, setIndexingRepoId] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -67,12 +70,14 @@ export function WorkspaceShell() {
   async function handleRepositorySubmit(payload: RepositoryCreatePayload) {
     setIsSubmitting(true);
     setError(null);
+    setStatusMessage(null);
 
     try {
       const created = await createRepository(payload);
       startTransition(() => {
         setRepositories((current) => [created, ...current]);
       });
+      setStatusMessage(`已登记仓库：${created.name}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to register the repository.");
     } finally {
@@ -80,13 +85,38 @@ export function WorkspaceShell() {
     }
   }
 
+  async function refreshRepositories() {
+    const repositoriesResponse = await listRepositories();
+    startTransition(() => {
+      setRepositories(repositoriesResponse.items);
+    });
+  }
+
+  async function handleIndexRepository(repoId: number) {
+    let summary: RepositoryIndexResponse;
+
+    setIndexingRepoId(repoId);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      summary = await indexRepository(repoId);
+      await refreshRepositories();
+      setStatusMessage(summary.message);
+    } catch (indexError) {
+      setError(indexError instanceof Error ? indexError.message : "Unable to index the repository.");
+    } finally {
+      setIndexingRepoId(null);
+    }
+  }
+
   return (
     <main className="page-shell">
       <section className="hero-card">
-        <p className="eyebrow">Stage 1 MVP</p>
+        <p className="eyebrow">Stage 2 MVP</p>
         <h1 className="hero-title">代码库问答与改动助手</h1>
         <p className="hero-copy">
-          当前阶段先把项目骨架搭稳：FastAPI、Next.js、SQLite schema、健康检查和仓库导入占位接口已经连通，后续再逐步加入索引、工具调用和 Agent 问答主流程。
+          当前阶段已经能登记仓库、查看健康状态并触发基础索引。后端会扫描文本文件、过滤常见无关目录和二进制文件，再把代码切成可追踪的行段 chunk，为后续检索和 Agent 工具调用打基础。
         </p>
         <div className="hero-grid">
           <div className="hero-stat">
@@ -99,12 +129,13 @@ export function WorkspaceShell() {
           </div>
           <div className="hero-stat">
             <div className="hero-stat-label">Reserved Modules</div>
-            <div className="hero-stat-value">agents / tools / indexing</div>
+            <div className="hero-stat-value">agents / tools online next</div>
           </div>
         </div>
       </section>
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {statusMessage ? <div className="success-banner">{statusMessage}</div> : null}
 
       <section className="workspace-grid">
         <div className="panel-stack">
@@ -114,6 +145,8 @@ export function WorkspaceShell() {
           />
           <RepositoryList
             isLoading={isLoading}
+            indexingRepoId={indexingRepoId}
+            onIndex={handleIndexRepository}
             repositories={repositories}
           />
         </div>

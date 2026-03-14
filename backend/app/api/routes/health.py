@@ -24,9 +24,9 @@ def get_meta() -> MetaResponse:
         version=settings.app_version,
         api_prefix=settings.api_prefix,
         features=[
-            "repository_import_placeholder",
-            "sqlite_schema_bootstrap",
-            "frontend_health_probe",
+            "repository_import",
+            "repository_tree",
+            "basic_chunk_indexing",
+            "frontend_workspace",
         ],
     )
-
