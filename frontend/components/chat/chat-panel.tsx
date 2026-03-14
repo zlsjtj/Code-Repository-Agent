@@ -1,60 +1,60 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 
 import type { ChatAskResponse, RepositoryRecord } from "@/lib/types";
 
 type ChatPanelProps = {
   repositories: RepositoryRecord[];
+  selectedRepoId: number | null;
   isAsking: boolean;
   onAsk: (repoId: number, question: string) => Promise<void> | void;
+  onSelectRepo: (repoId: number) => void;
   response: ChatAskResponse | null;
+  historyCount: number;
 };
+
+const presetQuestions = [
+  "这个仓库的主入口和核心模块分工分别在哪里？",
+  "索引和问答链路是怎么串起来的？关键接口在哪些文件？",
+  "如果现在要排查一个 bug，最值得优先看的文件有哪些？",
+];
 
 export function ChatPanel({
   repositories,
+  selectedRepoId,
   isAsking,
   onAsk,
+  onSelectRepo,
   response,
+  historyCount,
 }: ChatPanelProps) {
   const availableRepositories = repositories.filter(
     (repository) => repository.source_type === "local" && repository.status === "ready",
   );
 
-  const [selectedRepoId, setSelectedRepoId] = useState<number | null>(
-    availableRepositories[0]?.id ?? null,
-  );
   const [question, setQuestion] = useState(
     "这个仓库现在的索引流程是怎么工作的？关键入口在哪里？",
   );
 
-  useEffect(() => {
-    if (availableRepositories.length === 0) {
-      setSelectedRepoId(null);
-      return;
-    }
-
-    setSelectedRepoId((current) => {
-      if (current && availableRepositories.some((repository) => repository.id === current)) {
-        return current;
-      }
-      return availableRepositories[0].id;
-    });
-  }, [availableRepositories]);
+  const selectedRepository =
+    availableRepositories.find((repository) => repository.id === selectedRepoId) ??
+    availableRepositories[0] ??
+    null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedRepoId) {
+    if (!selectedRepository) {
       return;
     }
-    await onAsk(selectedRepoId, question.trim());
+    await onAsk(selectedRepository.id, question.trim());
   }
 
   return (
     <section className="panel-card">
       <h2 className="panel-title">问答主链路</h2>
       <p className="panel-copy">
-        这一版已经接入受控工具链。你可以选择一个已经完成索引的本地仓库，让 Agent 先检索再回答，并返回引用与调用摘要。
+        这一版已经接入受控工具链。你可以围绕一个已完成索引的本地仓库发问，让 Agent 先检索、再回答，并返回引用与调用摘要。
       </p>
 
       {availableRepositories.length === 0 ? (
@@ -65,11 +65,25 @@ export function ChatPanel({
         </div>
       ) : (
         <form className="field-grid" onSubmit={handleSubmit}>
+          <div className="focus-card">
+            <div className="focus-card-label">当前问答仓库</div>
+            <div className="focus-card-title">{selectedRepository?.name ?? "未选择仓库"}</div>
+            <div className="focus-card-copy">
+              {selectedRepository?.root_path ?? selectedRepository?.source_url ?? "请先选择一个仓库。"}
+            </div>
+            <div className="meta-pill-row">
+              <span className="meta-pill">
+                {selectedRepository?.primary_language ?? "language unknown"}
+              </span>
+              <span className="meta-pill">{historyCount} 条本地会话历史</span>
+            </div>
+          </div>
+
           <label className="field-label">
             选择仓库
             <select
-              onChange={(event) => setSelectedRepoId(Number(event.target.value))}
-              value={selectedRepoId ?? ""}
+              onChange={(event) => onSelectRepo(Number(event.target.value))}
+              value={selectedRepository?.id ?? ""}
             >
               {availableRepositories.map((repository) => (
                 <option key={repository.id} value={repository.id}>
@@ -89,10 +103,23 @@ export function ChatPanel({
             />
           </label>
 
+          <div className="preset-row">
+            {presetQuestions.map((preset) => (
+              <button
+                className="button-secondary preset-chip"
+                key={preset}
+                onClick={() => setQuestion(preset)}
+                type="button"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
           <div className="button-row">
             <button
               className="button-primary"
-              disabled={isAsking || !selectedRepoId || !question.trim()}
+              disabled={isAsking || !selectedRepository || !question.trim()}
               type="submit"
             >
               {isAsking ? "分析中..." : "发起问答"}
@@ -103,7 +130,16 @@ export function ChatPanel({
 
       {response ? (
         <div className="answer-card">
-          <div className="answer-label">Agent 回答</div>
+          <div className="answer-header">
+            <div className="answer-label">Agent 回答</div>
+            <div className="meta-pill-row">
+              <span className="meta-pill">session {response.session_id.slice(0, 8)}</span>
+              <span className="meta-pill">{response.citations.length} 条引用</span>
+              <span className="meta-pill">
+                {response.trace_summary.tool_call_count} 个工具步骤
+              </span>
+            </div>
+          </div>
           <pre className="answer-body">{response.answer}</pre>
         </div>
       ) : null}

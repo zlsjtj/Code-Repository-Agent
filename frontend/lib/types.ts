@@ -84,3 +84,13 @@ export type ChatAskResponse = {
   citations: ChatCitation[];
   trace_summary: ChatTraceSummary;
 };
+
+export type WorkspaceChatEntry = {
+  session_id: string;
+  question: string;
+  asked_at: string;
+  repository_id: number;
+  repository_name: string;
+  repository_language: string | null;
+  response: ChatAskResponse;
+};

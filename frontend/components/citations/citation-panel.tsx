@@ -20,6 +20,21 @@ export function CitationPanel({ response }: CitationPanelProps) {
         </div>
       ) : (
         <div className="citation-stack">
+          <div className="summary-grid">
+            <div className="summary-card">
+              <div className="summary-label">证据片段</div>
+              <div className="summary-value">{response.citations.length}</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">工具步骤</div>
+              <div className="summary-value">{response.trace_summary.tool_call_count}</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">响应耗时</div>
+              <div className="summary-value">{response.trace_summary.latency_ms} ms</div>
+            </div>
+          </div>
+
           <div className="trace-card">
             <div className="trace-meta">
               <span>{response.trace_summary.agent_name}</span>
@@ -49,12 +64,15 @@ export function CitationPanel({ response }: CitationPanelProps) {
             <div className="citation-list">
               {response.citations.map((citation, index) => (
                 <article className="citation-card" key={`${citation.path}-${index}`}>
-                  <div className="citation-path">
-                    {citation.path}
-                    {citation.start_line ? `:${citation.start_line}` : ""}
-                    {citation.end_line && citation.end_line !== citation.start_line
-                      ? `-${citation.end_line}`
-                      : ""}
+                  <div className="citation-card-header">
+                    <div className="citation-index">#{index + 1}</div>
+                    <div className="citation-path">
+                      {citation.path}
+                      {citation.start_line ? `:${citation.start_line}` : ""}
+                      {citation.end_line && citation.end_line !== citation.start_line
+                        ? `-${citation.end_line}`
+                        : ""}
+                    </div>
                   </div>
                   <div className="citation-note">{citation.note}</div>
                   {citation.symbol ? (
