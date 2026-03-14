@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.checks import CheckRunResponse
+
 
 class PatchDraftRequest(BaseModel):
     repo_id: int
@@ -50,3 +52,16 @@ class PatchApplyResponse(BaseModel):
     written_sha256: str
     written_line_count: int
     unified_diff: str
+
+
+class PatchApplyAndCheckRequest(BaseModel):
+    repo_id: int
+    target_path: str = Field(min_length=1)
+    expected_base_sha256: str = Field(min_length=8)
+    proposed_content: str
+    profile_ids: list[str] | None = Field(default=None)
+
+
+class PatchApplyAndCheckResponse(BaseModel):
+    patch: PatchApplyResponse
+    checks: CheckRunResponse

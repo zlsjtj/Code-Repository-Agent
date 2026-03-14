@@ -10,6 +10,7 @@ import { PatchDraftPanel } from "@/components/patches/patch-draft-panel";
 import { RepositoryImportForm } from "@/components/repositories/repository-import-form";
 import { RepositoryList } from "@/components/repositories/repository-list";
 import {
+  applyPatchAndRunChecks,
   applyPatchDraft,
   askRepositoryQuestion,
   createPatchDraft,
@@ -27,6 +28,7 @@ import type {
   ChatAskResponse,
   HealthResponse,
   MetaResponse,
+  PatchApplyAndCheckResponse,
   PatchApplyResponse,
   PatchDraftResponse,
   RepositoryCreatePayload,
@@ -53,6 +55,7 @@ export function WorkspaceShell() {
   const [isAsking, setIsAsking] = useState(false);
   const [isDraftingPatch, setIsDraftingPatch] = useState(false);
   const [isApplyingPatch, setIsApplyingPatch] = useState(false);
+  const [isApplyingAndChecking, setIsApplyingAndChecking] = useState(false);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [indexingRepoId, setIndexingRepoId] = useState<number | null>(null);
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
@@ -274,12 +277,35 @@ export function WorkspaceShell() {
       });
       setPatchResponse(response);
       setPatchApplyResponse(null);
+      setCheckResponse(null);
       setSelectedRepoId(repoId);
       setStatusMessage(`patch 草案已生成：${response.target_path}`);
     } catch (draftError) {
       setError(draftError instanceof Error ? draftError.message : "Unable to draft the patch.");
     } finally {
       setIsDraftingPatch(false);
+    }
+  }
+
+  async function handleApplyPatchAndRunChecks(draft: PatchDraftResponse) {
+    setIsApplyingAndChecking(true);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response: PatchApplyAndCheckResponse = await applyPatchAndRunChecks({
+        expected_base_sha256: draft.base_content_sha256,
+        proposed_content: draft.proposed_content,
+        repo_id: draft.repo_id,
+        target_path: draft.target_path,
+      });
+      setPatchApplyResponse(response.patch);
+      setCheckResponse(response.checks);
+      setStatusMessage(`patch 已写入并完成检查：${response.checks.summary}`);
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : "Unable to apply and verify the patch.");
+    } finally {
+      setIsApplyingAndChecking(false);
     }
   }
 
@@ -337,10 +363,10 @@ export function WorkspaceShell() {
   return (
     <main className="page-shell">
       <section className="hero-card">
-        <p className="eyebrow">Stage 8 Checks Loop</p>
+        <p className="eyebrow">Stage 9 Apply And Verify</p>
         <h1 className="hero-title">代码库问答与改动助手</h1>
         <p className="hero-copy">
-          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据、最近会话、patch 草案预览和安全写回流程整理进一个连续工作台，便于我们围绕同一份代码库持续分析和准备改动。
+          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据、最近会话、patch 草案、安全写回和 checks 闭环整理进一个连续工作台，便于我们围绕同一份代码库持续分析、改动并验证。
         </p>
         <div className="hero-badges">
           {meta?.features?.map((feature) => (
@@ -445,8 +471,10 @@ export function WorkspaceShell() {
           <PatchDraftPanel
             applyResponse={patchApplyResponse}
             isApplying={isApplyingPatch}
+            isApplyingAndChecking={isApplyingAndChecking}
             isDrafting={isDraftingPatch}
             onApply={handleApplyPatch}
+            onApplyAndCheck={handleApplyPatchAndRunChecks}
             onDraft={handleDraftPatch}
             response={patchResponse}
             selectedRepository={selectedRepository}

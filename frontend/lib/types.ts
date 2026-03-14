@@ -142,6 +142,14 @@ export type PatchApplyResponse = {
   unified_diff: string;
 };
 
+export type PatchApplyAndCheckPayload = {
+  repo_id: number;
+  target_path: string;
+  expected_base_sha256: string;
+  proposed_content: string;
+  profile_ids?: string[];
+};
+
 export type CheckCategory = "lint" | "typecheck" | "test";
 export type CheckStatus = "passed" | "failed" | "error" | "skipped";
 
@@ -182,4 +190,9 @@ export type CheckRunResponse = {
   status: CheckStatus;
   summary: string;
   results: CheckExecutionResult[];
+};
+
+export type PatchApplyAndCheckResponse = {
+  patch: PatchApplyResponse;
+  checks: CheckRunResponse;
 };

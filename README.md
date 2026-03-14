@@ -1,6 +1,6 @@
 # 代码库问答与改动助手（AI Agent）
 
-面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经完成前八阶段中的前七层核心能力，并把工作台继续推进到了“能运行白名单 lint/test 检查并返回结果”：
+面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经完成前九阶段中的前八层核心能力，并把工作台继续推进到了“能一键应用 patch 并运行 checks 验证”：
 
 - 第一阶段：项目骨架、FastAPI、Next.js、SQLite schema、健康检查、仓库导入
 - 第二阶段：本地仓库扫描、文件树接口、基础 chunk 索引、索引状态与调试查询
@@ -10,6 +10,7 @@
 - 第六阶段：单文件 patch 草案、unified diff 预览，以及前端 patch 工作区
 - 第七阶段：基于内容哈希校验的 patch 应用接口，把已确认的单文件草案安全写回工作区
 - 第八阶段：自动发现白名单检查项，支持运行 `pytest` / `npm run typecheck|lint|test` 并把结果返回到前端
+- 第九阶段：把 patch 应用与 checks 运行编排成一个一键闭环，减少手动切换和重复操作
 
 项目目标不是做一个“会聊天的网页”，而是做一个“能围绕代码任务调用工具、引用证据、逐步扩展到改动建议和检查闭环”的代码助手。
 
@@ -32,11 +33,12 @@
 - 生成单文件 patch 草案，并在前端直接预览 unified diff
 - 把确认过的 patch 草案安全写回本地工作区，并避免覆盖已变化的文件
 - 自动发现并运行安全白名单内的 lint/test 检查，直接返回 stdout / stderr 摘要
+- 一键完成 patch 写回和默认 checks 验证，并把结果汇总回工作台
 
 当前仍未实现：
 
 - GitHub 仓库克隆
-- patch 应用后自动触发检查的一键闭环
+- 根据改动范围自动挑选更精细的 checks 集合
 - 语义检索、rerank 和 AST 级符号定位增强
 - benchmark 样例、系统化评测和 trace 可视化
 
@@ -139,6 +141,7 @@
 - 页面内最近会话历史切换
 - Patch 草案表单与 diff 预览
 - Checks 面板与结果摘要
+- 一键应用并验证入口
 
 ## 数据模型
 
@@ -245,6 +248,7 @@
 
 - `POST /api/patches/draft`
 - `POST /api/patches/apply`
+- `POST /api/patches/apply-and-checks`
 
 ### Checks 接口
 
@@ -305,6 +309,47 @@
   "proposed_content": "..."
 }
 ```
+
+`POST /api/patches/apply-and-checks` 请求示例：
+
+```json
+{
+  "repo_id": 1,
+  "target_path": "backend/app/services/chat_service.py",
+  "expected_base_sha256": "9a8c...",
+  "proposed_content": "...",
+  "profile_ids": ["backend_pytest", "frontend_npm-typecheck"]
+}
+```
+
+返回结构：
+
+```json
+{
+  "patch": {
+    "repo_id": 1,
+    "target_path": "backend/app/services/chat_service.py",
+    "status": "applied",
+    "message": "The patch draft was written to the working tree successfully.",
+    "previous_sha256": "9a8c...",
+    "written_sha256": "2f11...",
+    "written_line_count": 101,
+    "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ..."
+  },
+  "checks": {
+    "repo_id": 1,
+    "status": "passed",
+    "summary": "Completed 2 checks successfully.",
+    "results": []
+  }
+}
+```
+
+说明补充：
+
+- `apply-and-checks` 会先校验 patch 基线，再写入工作区，最后运行选中的默认检查
+- 如果 `profile_ids` 为空，会运行当前仓库下自动发现的全部白名单检查
+- 如果 `profile_ids` 非法，后端会在写入 patch 之前先拒绝请求，避免“文件已改但检查参数无效”的半完成状态
 
 `GET /api/checks/repositories/{repo_id}/profiles` 返回示例：
 
@@ -564,6 +609,7 @@ python -m pytest
 - patch 草案接口：返回 unified diff 和完整草案内容
 - patch 应用接口：只在基线内容未变化时把草案写回工作区
 - checks 接口：发现并运行白名单 lint/test 命令，返回结果摘要
+- apply-and-checks 接口：把 patch 写回和检查执行串成一次请求
 
 ## 设计取舍
 
@@ -581,7 +627,7 @@ python -m pytest
 
 下一阶段建议优先实现：
 
-1. 把 patch 应用与 checks 运行串成“一键应用并验证”的闭环
+1. 根据改动范围自动推荐更合适的 checks 组合
 2. 增加 benchmark 样例与问答评测
 3. 引入更稳妥的检索策略，例如 embedding 和 rerank
 4. 支持多文件 patch 草案与分步确认

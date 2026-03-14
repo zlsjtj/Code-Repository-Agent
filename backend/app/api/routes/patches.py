@@ -2,7 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.schemas.patch import PatchApplyRequest, PatchApplyResponse, PatchDraftRequest, PatchDraftResponse
+from app.schemas.patch import (
+    PatchApplyAndCheckRequest,
+    PatchApplyAndCheckResponse,
+    PatchApplyRequest,
+    PatchApplyResponse,
+    PatchDraftRequest,
+    PatchDraftResponse,
+)
 from app.services.patch_service import PatchConfigurationError, PatchConflictError, PatchService
 from app.services.repository_service import RepositoryValidationError
 
@@ -31,6 +38,22 @@ def apply_patch(
     service = PatchService(db)
     try:
         return service.apply_patch(payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (RepositoryValidationError, PatchConfigurationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/apply-and-checks", response_model=PatchApplyAndCheckResponse)
+def apply_patch_and_run_checks(
+    payload: PatchApplyAndCheckRequest,
+    db: Session = Depends(get_db),
+) -> PatchApplyAndCheckResponse:
+    service = PatchService(db)
+    try:
+        return service.apply_patch_and_run_checks(payload)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except PatchConflictError as exc:

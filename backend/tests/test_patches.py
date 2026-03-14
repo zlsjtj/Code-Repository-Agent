@@ -128,3 +128,58 @@ def test_patch_apply_rejects_stale_draft(client, tmp_path):
 
     assert apply_response.status_code == 409
     assert "changed since this draft was generated" in apply_response.json()["detail"]
+
+
+def test_patch_apply_and_checks_runs_closed_loop(client, tmp_path):
+    repository_dir = tmp_path / "closed-loop-repo"
+    backend_dir = repository_dir / "backend"
+    tests_dir = backend_dir / "tests"
+    tests_dir.mkdir(parents=True)
+    target_file = backend_dir / "service.py"
+    target_file.write_text(
+        "\n".join(
+            [
+                "def greet(name: str) -> str:",
+                '    return "hello"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (backend_dir / "pyproject.toml").write_text("[project]\nname='demo'\nversion='0.1.0'\n", encoding="utf-8")
+    (tests_dir / "test_service.py").write_text(
+        "\n".join(
+            [
+                "from service import greet",
+                "",
+                "def test_greet_uses_name():",
+                '    assert greet("Codex") == "hello Codex"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    create_response = client.post(
+        "/api/repositories",
+        json={"source_type": "local", "root_path": str(repository_dir)},
+    )
+    repo_id = create_response.json()["id"]
+    expected_base_sha256 = hashlib.sha256(target_file.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+
+    response = client.post(
+        "/api/patches/apply-and-checks",
+        json={
+            "repo_id": repo_id,
+            "target_path": "backend/service.py",
+            "expected_base_sha256": expected_base_sha256,
+            "proposed_content": 'def greet(name: str) -> str:\n    return f"hello {name}"\n',
+            "profile_ids": ["backend_pytest"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["patch"]["status"] == "applied"
+    assert payload["checks"]["status"] == "passed"
+    assert payload["checks"]["results"][0]["id"] == "backend_pytest"

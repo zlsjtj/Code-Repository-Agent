@@ -12,13 +12,17 @@ from sqlalchemy.orm import Session
 
 from app.agents.patch_draft_agent import PatchDraftFinalOutput, build_patch_draft_agent
 from app.core.config import get_settings
+from app.schemas.checks import CheckRunRequest
 from app.schemas.patch import (
+    PatchApplyAndCheckRequest,
+    PatchApplyAndCheckResponse,
     PatchApplyRequest,
     PatchApplyResponse,
     PatchDraftRequest,
     PatchDraftResponse,
     PatchDraftTraceSummary,
 )
+from app.services.checks_service import CheckService
 from app.services.repository_service import RepositoryService, RepositoryValidationError
 
 MAX_PATCH_FILE_CHARS = 20_000
@@ -36,6 +40,7 @@ class PatchConflictError(ValueError):
 class PatchService:
     def __init__(self, db: Session):
         self.db = db
+        self.check_service = CheckService(db)
         self.repository_service = RepositoryService(db)
 
     async def draft_patch(self, payload: PatchDraftRequest) -> PatchDraftResponse:
@@ -140,6 +145,28 @@ class PatchService:
             unified_diff=diff,
         )
 
+    def apply_patch_and_run_checks(
+        self,
+        payload: PatchApplyAndCheckRequest,
+    ) -> PatchApplyAndCheckResponse:
+        self._validate_check_profile_selection(payload.repo_id, payload.profile_ids)
+
+        patch_result = self.apply_patch(
+            PatchApplyRequest(
+                repo_id=payload.repo_id,
+                target_path=payload.target_path,
+                expected_base_sha256=payload.expected_base_sha256,
+                proposed_content=payload.proposed_content,
+            )
+        )
+        check_result = self.check_service.run_checks(
+            CheckRunRequest(repo_id=payload.repo_id, profile_ids=payload.profile_ids)
+        )
+        return PatchApplyAndCheckResponse(
+            patch=patch_result,
+            checks=check_result,
+        )
+
     async def _run_agent(self, *, prompt: str, model: str) -> tuple[PatchDraftFinalOutput, str]:
         agent = build_patch_draft_agent(model)
         result = await Runner.run(agent, prompt)
@@ -220,3 +247,14 @@ class PatchService:
 
     def _hash_content(self, content: str) -> str:
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    def _validate_check_profile_selection(self, repo_id: int, profile_ids: list[str] | None) -> None:
+        if not profile_ids:
+            return
+
+        available_ids = {item.id for item in self.check_service.list_profiles(repo_id).items}
+        missing = [profile_id for profile_id in profile_ids if profile_id not in available_ids]
+        if missing:
+            raise RepositoryValidationError(
+                f"Unknown check profile ids: {', '.join(sorted(missing))}."
+            )

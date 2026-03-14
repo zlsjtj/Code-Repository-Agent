@@ -2,6 +2,8 @@ import type {
   CheckProfileListResponse,
   CheckRunPayload,
   CheckRunResponse,
+  PatchApplyAndCheckPayload,
+  PatchApplyAndCheckResponse,
   PatchApplyPayload,
   PatchApplyResponse,
   ChatAskPayload,
@@ -83,6 +85,13 @@ export function createPatchDraft(payload: PatchDraftPayload) {
 
 export function applyPatchDraft(payload: PatchApplyPayload) {
   return request<PatchApplyResponse>("/api/patches/apply", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function applyPatchAndRunChecks(payload: PatchApplyAndCheckPayload) {
+  return request<PatchApplyAndCheckResponse>("/api/patches/apply-and-checks", {
     body: JSON.stringify(payload),
     method: "POST",
   });

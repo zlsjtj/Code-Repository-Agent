@@ -9,8 +9,10 @@ type PatchDraftPanelProps = {
   suggestedPath: string | null;
   isDrafting: boolean;
   isApplying: boolean;
+  isApplyingAndChecking: boolean;
   onDraft: (repoId: number, targetPath: string, instruction: string) => Promise<void> | void;
   onApply: (response: PatchDraftResponse) => Promise<void> | void;
+  onApplyAndCheck: (response: PatchDraftResponse) => Promise<void> | void;
   response: PatchDraftResponse | null;
   applyResponse: PatchApplyResponse | null;
 };
@@ -20,8 +22,10 @@ export function PatchDraftPanel({
   suggestedPath,
   isDrafting,
   isApplying,
+  isApplyingAndChecking,
   onDraft,
   onApply,
+  onApplyAndCheck,
   response,
   applyResponse,
 }: PatchDraftPanelProps) {
@@ -174,7 +178,12 @@ export function PatchDraftPanel({
             <div className="button-row patch-action-row">
               <button
                 className="button-primary"
-                disabled={isApplying || !response.unified_diff || applyResponse?.status === "applied"}
+                disabled={
+                  isApplying ||
+                  isApplyingAndChecking ||
+                  !response.unified_diff ||
+                  applyResponse?.status === "applied"
+                }
                 onClick={() => onApply(response)}
                 type="button"
               >
@@ -183,6 +192,19 @@ export function PatchDraftPanel({
                   : isApplying
                     ? "应用中..."
                     : "确认应用到工作区"}
+              </button>
+              <button
+                className="button-secondary"
+                disabled={
+                  isApplying ||
+                  isApplyingAndChecking ||
+                  !response.unified_diff ||
+                  applyResponse?.status === "applied"
+                }
+                onClick={() => onApplyAndCheck(response)}
+                type="button"
+              >
+                {isApplyingAndChecking ? "应用并验证中..." : "应用并运行默认检查"}
               </button>
               <div className="field-help">
                 应用前会校验文件基线哈希；如果文件已经变化，后端会拒绝写入，避免覆盖未预览的新内容。
