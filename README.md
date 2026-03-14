@@ -1,6 +1,6 @@
 # 代码库问答与改动助手（AI Agent）
 
-面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经推进到第十二阶段，并把工作台继续扩展到了“支持多文件 patch 的逐项确认与安全批量应用”：
+面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经推进到第十三阶段，并把工作台继续扩展到了“支持 GitHub 仓库 clone 导入并进入完整工作流”：
 
 - 第一阶段：项目骨架、FastAPI、Next.js、SQLite schema、健康检查、仓库导入
 - 第二阶段：本地仓库扫描、文件树接口、基础 chunk 索引、索引状态与调试查询
@@ -14,6 +14,7 @@
 - 第十阶段：根据 patch 目标路径自动推荐 checks 组合，让 apply-and-verify 更贴近真实改动范围
 - 第十一阶段：支持多文件 patch 草案批量预览，按文件返回 grouped diff，并把推荐 checks 自动扩展到多路径改动
 - 第十二阶段：支持多文件 patch 的勾选确认、all-or-nothing 批量写回，以及批量 apply 后运行 checks
+- 第十三阶段：支持把 GitHub 仓库 clone 到受管目录，并复用现有索引、问答、patch 和 checks 流程
 
 项目目标不是做一个“会聊天的网页”，而是做一个“能围绕代码任务调用工具、引用证据、逐步扩展到改动建议和检查闭环”的代码助手。
 
@@ -23,6 +24,7 @@
 
 - 登记本地仓库路径
 - 保存 GitHub 仓库元信息
+- 把 GitHub 仓库 clone 到受管 `repos/` 目录
 - 扫描本地仓库文件树
 - 过滤常见无关目录、二进制文件和超大文件
 - 按行切分文本文件并写入 `FileChunk`
@@ -43,7 +45,6 @@
 
 当前仍未实现：
 
-- GitHub 仓库克隆
 - checks 失败后的自动回滚
 - 更细粒度地结合 diff 内容、语言和目录结构推荐 checks
 - 语义检索、rerank 和 AST 级符号定位增强
@@ -307,7 +308,7 @@
 
 说明：
 
-- 当前 patch 草案只支持本地仓库
+- 只要仓库拥有可用 `root_path`，无论是本地路径还是 GitHub clone，都可以继续进入索引、问答、patch 和 checks 流程
 - `draft` 只处理单个现有文本文件
 - `draft-batch` 支持一次预览多个现有文本文件，默认上限 `5` 个文件
 - `draft` 返回的是预览结果，不会自动把文件写回工作区
@@ -683,6 +684,14 @@ uvicorn app.main:app --reload --port 8000
 - Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Health: [http://localhost:8000/api/health](http://localhost:8000/api/health)
 
+GitHub 导入补充：
+
+- `POST /api/repositories` 在 `source_type=github` 时会调用本机 `git clone`
+- clone 目标目录默认是根目录下的 `repos/`
+- 如需调整 clone 超时或深度，可配置：
+  - `CODE_AGENT_GIT_CLONE_TIMEOUT_SECONDS`
+  - `CODE_AGENT_GIT_CLONE_DEPTH`
+
 ### 3. 启动前端
 
 ```powershell
@@ -791,4 +800,4 @@ python -m pytest
 2. 增加 benchmark 样例与问答评测
 3. 引入更稳妥的检索策略，例如 embedding 和 rerank
 4. 增加 checks 失败后的回滚建议与修复流
-5. 再考虑 GitHub 自动克隆与后台任务队列
+5. 再考虑后台任务队列与更完整的导入审计

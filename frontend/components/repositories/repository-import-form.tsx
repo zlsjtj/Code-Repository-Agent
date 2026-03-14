@@ -60,7 +60,7 @@ export function RepositoryImportForm({
     <section className="panel-card">
       <h2 className="panel-title">导入仓库</h2>
       <p className="panel-copy">
-        当前版本已经支持本地仓库登记与索引，GitHub 仓库仍先保存元信息。这里保留最小表单，方便我们快速把仓库接入工作台。
+        当前版本已经支持本地仓库直接接入，也支持把 GitHub 仓库 clone 到受管 `repos/` 目录后继续索引与问答。这里保留最小表单，方便我们快速把仓库接入工作台。
       </p>
       <form className="field-grid" onSubmit={handleSubmit}>
         <div className="field-row">
@@ -117,7 +117,7 @@ export function RepositoryImportForm({
         )}
 
         <p className="field-help">
-          本地仓库可在登记后直接触发索引；GitHub 仓库目前只保存地址、分支等基础信息。
+          本地仓库会直接引用原始路径；GitHub 仓库会在后端 clone 到受管目录，并把 clone 后的工作区路径登记到 `root_path`。
         </p>
 
         <div className="button-row">

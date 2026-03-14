@@ -203,8 +203,7 @@ class PatchService:
             )
 
         repository = self.repository_service.get_repository(repo_id)
-        if repository.source_type != "local":
-            raise RepositoryValidationError("Patch drafting is currently available only for local repositories.")
+        self.repository_service.resolve_repository_root(repository)
 
         return settings, repository
 
@@ -326,8 +325,7 @@ class PatchService:
         items: list[PatchApplyFile],
     ) -> list[PreparedPatchApply]:
         repository = self.repository_service.get_repository(repo_id)
-        if repository.source_type != "local":
-            raise RepositoryValidationError("Patch apply is currently available only for local repositories.")
+        self.repository_service.resolve_repository_root(repository)
 
         prepared_items: list[PreparedPatchApply] = []
         seen_paths: set[str] = set()

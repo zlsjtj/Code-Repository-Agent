@@ -210,7 +210,7 @@ export function PatchDraftPanel({
     await onDraft(selectedRepository.id, parsedTargetPaths, instruction.trim());
   }
 
-  const isLocalRepository = selectedRepository?.source_type === "local";
+  const hasWorkspaceRoot = Boolean(selectedRepository?.root_path);
   const isBatchMode = parsedTargetPaths.length > 1;
 
   return (
@@ -224,10 +224,10 @@ export function PatchDraftPanel({
         <div className="placeholder-card">
           <div className="placeholder-copy">先选择一个仓库，再生成 patch 草案。</div>
         </div>
-      ) : !isLocalRepository ? (
+      ) : !hasWorkspaceRoot ? (
         <div className="placeholder-card">
           <div className="placeholder-copy">
-            当前只支持本地仓库的 patch 草案。GitHub 仓库还停留在元信息登记阶段。
+            当前仓库还没有可用工作区。先确保它已经导入本地路径，或者已经从 GitHub clone 成功。
           </div>
         </div>
       ) : (

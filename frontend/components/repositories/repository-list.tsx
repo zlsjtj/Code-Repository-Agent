@@ -21,7 +21,7 @@ export function RepositoryList({
     <section className="panel-card">
       <h2 className="panel-title">已登记仓库</h2>
       <p className="panel-copy">
-        这里展示已经写入 SQLite 的仓库记录。你可以把其中一个仓库设为当前上下文，再决定是否触发本地索引。
+        这里展示已经写入 SQLite 的仓库记录。只要仓库已经拥有可用 `root_path`，无论来自本地还是 GitHub clone，都可以继续触发索引。
       </p>
       {repositories.length === 0 ? (
         <div className="placeholder-card">
@@ -40,9 +40,7 @@ export function RepositoryList({
                 <div>
                   <div className="repo-title">{repository.name}</div>
                   <div className="repo-meta">
-                    {repository.source_type === "local"
-                      ? repository.root_path
-                      : repository.source_url}
+                    {repository.root_path ?? repository.source_url}
                   </div>
                 </div>
                 <span className="status-pill">{repository.status}</span>
@@ -54,7 +52,7 @@ export function RepositoryList({
               <div className="meta-pill-row">
                 <span className="meta-pill">{repository.primary_language ?? "language unknown"}</span>
                 <span className="meta-pill">
-                  {repository.source_type === "local" ? "可建立本地索引" : "当前仅登记元信息"}
+                  {repository.root_path ? "可建立索引" : "等待工作区"}
                 </span>
               </div>
               <div className="button-row">
@@ -67,12 +65,12 @@ export function RepositoryList({
                 </button>
                 <button
                   className="button-secondary"
-                  disabled={repository.source_type !== "local" || indexingRepoId === repository.id}
+                  disabled={!repository.root_path || indexingRepoId === repository.id}
                   onClick={() => onIndex(repository.id)}
                   type="button"
                 >
-                  {repository.source_type !== "local"
-                    ? "仅本地索引"
+                  {!repository.root_path
+                    ? "缺少工作区"
                     : indexingRepoId === repository.id
                       ? "索引中..."
                       : "触发索引"}

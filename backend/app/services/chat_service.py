@@ -101,8 +101,7 @@ class ChatService:
         return final_output, agent_name
 
     def _validate_repository_for_chat(self, repository: Repository) -> None:
-        if repository.source_type != "local":
-            raise RepositoryValidationError("Chat is currently available only for indexed local repositories.")
+        self.repository_service.resolve_repository_root(repository)
         if repository.status != "ready":
             raise RepositoryValidationError("Index the repository first before asking questions.")
 

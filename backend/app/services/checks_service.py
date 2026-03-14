@@ -186,10 +186,7 @@ class CheckService:
 
     def _discover_profiles(self, repo_id: int) -> list[ResolvedCheckProfile]:
         repository = self.repository_service.get_repository(repo_id)
-        if repository.source_type != "local":
-            raise RepositoryValidationError("Checks are currently available only for local repositories.")
-
-        root = self.repository_service.resolve_local_root(repository)
+        root = self.repository_service.resolve_repository_root(repository)
         candidate_dirs = [root]
         for child_name in ("backend", "frontend"):
             child_path = root / child_name

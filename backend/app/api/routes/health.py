@@ -25,6 +25,7 @@ def get_meta() -> MetaResponse:
         api_prefix=settings.api_prefix,
         features=[
             "repository_import",
+            "github_clone_import",
             "repository_tree",
             "basic_chunk_indexing",
             "search_repo",

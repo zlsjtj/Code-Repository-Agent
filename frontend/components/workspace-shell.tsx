@@ -130,14 +130,14 @@ export function WorkspaceShell() {
       }
 
       const preferredRepository = repositories.find(
-        (repository) => repository.source_type === "local" && repository.status === "ready",
+        (repository) => Boolean(repository.root_path) && repository.status === "ready",
       );
       return preferredRepository?.id ?? repositories[0].id;
     });
   }, [repositories]);
 
   const readyRepositories = repositories.filter(
-    (repository) => repository.source_type === "local" && repository.status === "ready",
+    (repository) => Boolean(repository.root_path) && repository.status === "ready",
   );
   const selectedRepository =
     repositories.find((repository) => repository.id === selectedRepoId) ?? null;
@@ -188,7 +188,7 @@ export function WorkspaceShell() {
     let active = true;
 
     async function loadCheckProfiles() {
-      if (!selectedRepository || selectedRepository.source_type !== "local") {
+      if (!selectedRepository || !selectedRepository.root_path) {
         startTransition(() => {
           setCheckProfiles([]);
         });
@@ -235,7 +235,7 @@ export function WorkspaceShell() {
 
       if (
         !selectedRepository ||
-        selectedRepository.source_type !== "local" ||
+        !selectedRepository.root_path ||
         !changedPaths ||
         changedPaths.length === 0
       ) {
@@ -537,10 +537,10 @@ export function WorkspaceShell() {
   return (
     <main className="page-shell">
       <section className="hero-card">
-        <p className="eyebrow">Stage 12 Multi-File Apply</p>
+        <p className="eyebrow">Stage 13 GitHub Clone Import</p>
         <h1 className="hero-title">代码库问答与改动助手</h1>
         <p className="hero-copy">
-          当前阶段已经把多文件 patch 从“只预览”推进到了“可逐项确认后安全批量应用”：现在不仅能分组看 diff，还能对选中的文件做 all-or-nothing 写回，并继续挂上推荐 checks 做验证。
+          当前阶段已经把 GitHub 仓库从“只登记元信息”推进到了“clone 后直接进入完整工作流”：现在无论仓库来自本地路径还是 GitHub，只要拿到可用工作区，就能继续索引、问答、patch 和 checks。
         </p>
         <div className="hero-badges">
           {meta?.features?.map((feature) => (
@@ -618,7 +618,7 @@ export function WorkspaceShell() {
               <div className="focus-card-copy">
                 {selectedRepository
                   ? selectedRepository.root_path ?? selectedRepository.source_url ?? "无可展示路径"
-                  : "先从左侧仓库列表里选择一个上下文，或者登记新的本地仓库。"}
+                  : "先从左侧仓库列表里选择一个上下文，或者登记新的仓库。"}
               </div>
               <div className="meta-pill-row">
                 <span className="meta-pill">

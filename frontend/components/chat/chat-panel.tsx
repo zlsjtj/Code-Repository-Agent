@@ -30,7 +30,7 @@ export function ChatPanel({
   historyCount,
 }: ChatPanelProps) {
   const availableRepositories = repositories.filter(
-    (repository) => repository.source_type === "local" && repository.status === "ready",
+    (repository) => Boolean(repository.root_path) && repository.status === "ready",
   );
 
   const [question, setQuestion] = useState(
@@ -54,13 +54,13 @@ export function ChatPanel({
     <section className="panel-card">
       <h2 className="panel-title">问答主链路</h2>
       <p className="panel-copy">
-        这一版已经接入受控工具链。你可以围绕一个已完成索引的本地仓库发问，让 Agent 先检索、再回答，并返回引用与调用摘要。
+        这一版已经接入受控工具链。你可以围绕一个已完成索引、且拥有可用工作区的仓库发问，让 Agent 先检索、再回答，并返回引用与调用摘要。
       </p>
 
       {availableRepositories.length === 0 ? (
         <div className="placeholder-card">
           <div className="placeholder-copy">
-            先登记并索引一个本地仓库，问答能力才会启用。
+            先登记并索引一个仓库，问答能力才会启用。
           </div>
         </div>
       ) : (
@@ -75,7 +75,7 @@ export function ChatPanel({
               <span className="meta-pill">
                 {selectedRepository?.primary_language ?? "language unknown"}
               </span>
-              <span className="meta-pill">{historyCount} 条本地会话历史</span>
+              <span className="meta-pill">{historyCount} 条会话历史</span>
             </div>
           </div>
 

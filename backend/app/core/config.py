@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     data_dir: str = "data"
     repos_dir: str = "repos"
     openai_model: str = "gpt-4.1-mini"
+    git_clone_timeout_seconds: int = 180
+    git_clone_depth: int = 1
     check_command_timeout_seconds: int = 120
     check_output_char_limit: int = 4000
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
