@@ -2,7 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.schemas.checks import CheckProfileListResponse, CheckRunRequest, CheckRunResponse
+from app.schemas.checks import (
+    CheckProfileListResponse,
+    CheckRecommendationRequest,
+    CheckRecommendationResponse,
+    CheckRunRequest,
+    CheckRunResponse,
+)
 from app.services.checks_service import CheckService
 from app.services.repository_service import RepositoryValidationError
 
@@ -17,6 +23,20 @@ def list_check_profiles(
     service = CheckService(db)
     try:
         return service.list_profiles(repo_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RepositoryValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/recommend", response_model=CheckRecommendationResponse)
+def recommend_checks(
+    payload: CheckRecommendationRequest,
+    db: Session = Depends(get_db),
+) -> CheckRecommendationResponse:
+    service = CheckService(db)
+    try:
+        return service.recommend_profiles(payload)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except RepositoryValidationError as exc:

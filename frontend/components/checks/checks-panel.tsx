@@ -2,6 +2,7 @@
 
 import type {
   CheckProfile,
+  CheckRecommendationResponse,
   CheckRunResponse,
   PatchApplyResponse,
   RepositoryRecord,
@@ -11,7 +12,9 @@ type ChecksPanelProps = {
   selectedRepository: RepositoryRecord | null;
   profiles: CheckProfile[];
   isLoadingProfiles: boolean;
+  isLoadingRecommendation: boolean;
   isRunningChecks: boolean;
+  recommendation: CheckRecommendationResponse | null;
   response: CheckRunResponse | null;
   patchApplyResponse: PatchApplyResponse | null;
   onRunChecks: (profileIds?: string[]) => Promise<void> | void;
@@ -21,7 +24,9 @@ export function ChecksPanel({
   selectedRepository,
   profiles,
   isLoadingProfiles,
+  isLoadingRecommendation,
   isRunningChecks,
+  recommendation,
   response,
   patchApplyResponse,
   onRunChecks,
@@ -84,6 +89,47 @@ export function ChecksPanel({
               </article>
             ))}
           </div>
+
+          {isLoadingRecommendation ? (
+            <div className="placeholder-card">
+              <div className="placeholder-copy">正在根据当前 patch 目标推荐更合适的检查组合...</div>
+            </div>
+          ) : recommendation ? (
+            <div className="recommendation-card">
+              <div className="answer-header">
+                <div className="answer-label">推荐检查</div>
+                <div className="meta-pill-row">
+                  <span className="meta-pill">{recommendation.strategy}</span>
+                  <span className="meta-pill">{recommendation.items.length} 项</span>
+                </div>
+              </div>
+              <div className="patch-copy">{recommendation.summary}</div>
+              <div className="check-profile-list top-gap">
+                {recommendation.items.map((item) => (
+                  <article className="check-profile-card" key={item.id}>
+                    <div className="answer-header">
+                      <div className="answer-label">{item.name}</div>
+                      <div className="meta-pill-row">
+                        <span className="meta-pill">{item.category}</span>
+                        <span className="meta-pill">score {item.score}</span>
+                      </div>
+                    </div>
+                    <div className="citation-meta">{item.reason}</div>
+                  </article>
+                ))}
+              </div>
+              <div className="button-row patch-action-row top-gap">
+                <button
+                  className="button-secondary"
+                  disabled={isRunningChecks || recommendation.items.length === 0}
+                  onClick={() => onRunChecks(recommendation.items.map((item) => item.id))}
+                  type="button"
+                >
+                  {isRunningChecks ? "运行中..." : "只运行推荐检查"}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="button-row patch-action-row">
             <button

@@ -1,5 +1,7 @@
 import type {
   CheckProfileListResponse,
+  CheckRecommendationPayload,
+  CheckRecommendationResponse,
   CheckRunPayload,
   CheckRunResponse,
   PatchApplyAndCheckPayload,
@@ -99,6 +101,13 @@ export function applyPatchAndRunChecks(payload: PatchApplyAndCheckPayload) {
 
 export function fetchCheckProfiles(repoId: number) {
   return request<CheckProfileListResponse>(`/api/checks/repositories/${repoId}/profiles`);
+}
+
+export function fetchRecommendedChecks(payload: CheckRecommendationPayload) {
+  return request<CheckRecommendationResponse>("/api/checks/recommend", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
 }
 
 export function runRepositoryChecks(payload: CheckRunPayload) {

@@ -16,6 +16,7 @@ import {
   createPatchDraft,
   createRepository,
   fetchCheckProfiles,
+  fetchRecommendedChecks,
   fetchHealth,
   fetchMeta,
   indexRepository,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/api";
 import type {
   CheckProfile,
+  CheckRecommendationResponse,
   CheckRunResponse,
   ChatAskResponse,
   HealthResponse,
@@ -45,12 +47,14 @@ export function WorkspaceShell() {
   const [patchResponse, setPatchResponse] = useState<PatchDraftResponse | null>(null);
   const [patchApplyResponse, setPatchApplyResponse] = useState<PatchApplyResponse | null>(null);
   const [checkProfiles, setCheckProfiles] = useState<CheckProfile[]>([]);
+  const [checkRecommendation, setCheckRecommendation] = useState<CheckRecommendationResponse | null>(null);
   const [checkResponse, setCheckResponse] = useState<CheckRunResponse | null>(null);
   const [chatHistory, setChatHistory] = useState<WorkspaceChatEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCheckProfiles, setIsLoadingCheckProfiles] = useState(false);
+  const [isLoadingCheckRecommendation, setIsLoadingCheckRecommendation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
   const [isDraftingPatch, setIsDraftingPatch] = useState(false);
@@ -149,6 +153,12 @@ export function WorkspaceShell() {
       }
       return current.repo_id === selectedRepoId ? current : null;
     });
+    setCheckRecommendation((current) => {
+      if (!current) {
+        return current;
+      }
+      return current.repo_id === selectedRepoId ? current : null;
+    });
   }, [selectedRepoId]);
 
   useEffect(() => {
@@ -188,6 +198,52 @@ export function WorkspaceShell() {
       active = false;
     };
   }, [selectedRepository]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCheckRecommendation() {
+      if (
+        !selectedRepository ||
+        selectedRepository.source_type !== "local" ||
+        !patchResponse ||
+        patchResponse.repo_id !== selectedRepository.id
+      ) {
+        startTransition(() => {
+          setCheckRecommendation(null);
+        });
+        return;
+      }
+
+      try {
+        setIsLoadingCheckRecommendation(true);
+        const response = await fetchRecommendedChecks({
+          changed_paths: [patchResponse.target_path],
+          repo_id: selectedRepository.id,
+        });
+        if (!active) {
+          return;
+        }
+        startTransition(() => {
+          setCheckRecommendation(response);
+        });
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(loadError instanceof Error ? loadError.message : "Unable to load recommended checks.");
+      } finally {
+        if (active) {
+          setIsLoadingCheckRecommendation(false);
+        }
+      }
+    }
+
+    void loadCheckRecommendation();
+    return () => {
+      active = false;
+    };
+  }, [patchResponse, selectedRepository]);
 
   async function handleRepositorySubmit(payload: RepositoryCreatePayload) {
     setIsSubmitting(true);
@@ -277,6 +333,7 @@ export function WorkspaceShell() {
       });
       setPatchResponse(response);
       setPatchApplyResponse(null);
+      setCheckRecommendation(null);
       setCheckResponse(null);
       setSelectedRepoId(repoId);
       setStatusMessage(`patch 草案已生成：${response.target_path}`);
@@ -295,6 +352,10 @@ export function WorkspaceShell() {
     try {
       const response: PatchApplyAndCheckResponse = await applyPatchAndRunChecks({
         expected_base_sha256: draft.base_content_sha256,
+        profile_ids:
+          checkRecommendation && checkRecommendation.items.length > 0
+            ? checkRecommendation.items.map((item) => item.id)
+            : undefined,
         proposed_content: draft.proposed_content,
         repo_id: draft.repo_id,
         target_path: draft.target_path,
@@ -363,10 +424,10 @@ export function WorkspaceShell() {
   return (
     <main className="page-shell">
       <section className="hero-card">
-        <p className="eyebrow">Stage 9 Apply And Verify</p>
+        <p className="eyebrow">Stage 10 Smart Checks</p>
         <h1 className="hero-title">代码库问答与改动助手</h1>
         <p className="hero-copy">
-          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据、最近会话、patch 草案、安全写回和 checks 闭环整理进一个连续工作台，便于我们围绕同一份代码库持续分析、改动并验证。
+          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据、最近会话、patch 草案、安全写回和 checks 推荐闭环整理进一个连续工作台，便于我们围绕同一份代码库持续分析、改动并验证。
         </p>
         <div className="hero-badges">
           {meta?.features?.map((feature) => (
@@ -473,6 +534,7 @@ export function WorkspaceShell() {
             isApplying={isApplyingPatch}
             isApplyingAndChecking={isApplyingAndChecking}
             isDrafting={isDraftingPatch}
+            recommendedCheckCount={checkRecommendation?.items.length ?? 0}
             onApply={handleApplyPatch}
             onApplyAndCheck={handleApplyPatchAndRunChecks}
             onDraft={handleDraftPatch}
@@ -482,10 +544,12 @@ export function WorkspaceShell() {
           />
           <ChecksPanel
             isLoadingProfiles={isLoadingCheckProfiles}
+            isLoadingRecommendation={isLoadingCheckRecommendation}
             isRunningChecks={isRunningChecks}
             onRunChecks={handleRunChecks}
             patchApplyResponse={patchApplyResponse}
             profiles={checkProfiles}
+            recommendation={checkRecommendation}
             response={checkResponse}
             selectedRepository={selectedRepository}
           />

@@ -1,6 +1,6 @@
 # 代码库问答与改动助手（AI Agent）
 
-面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经完成前九阶段中的前八层核心能力，并把工作台继续推进到了“能一键应用 patch 并运行 checks 验证”：
+面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经完成前十阶段中的前九层核心能力，并把工作台继续推进到了“能根据改动范围推荐更合适的 checks 组合”：
 
 - 第一阶段：项目骨架、FastAPI、Next.js、SQLite schema、健康检查、仓库导入
 - 第二阶段：本地仓库扫描、文件树接口、基础 chunk 索引、索引状态与调试查询
@@ -11,6 +11,7 @@
 - 第七阶段：基于内容哈希校验的 patch 应用接口，把已确认的单文件草案安全写回工作区
 - 第八阶段：自动发现白名单检查项，支持运行 `pytest` / `npm run typecheck|lint|test` 并把结果返回到前端
 - 第九阶段：把 patch 应用与 checks 运行编排成一个一键闭环，减少手动切换和重复操作
+- 第十阶段：根据 patch 目标路径自动推荐 checks 组合，让 apply-and-verify 更贴近真实改动范围
 
 项目目标不是做一个“会聊天的网页”，而是做一个“能围绕代码任务调用工具、引用证据、逐步扩展到改动建议和检查闭环”的代码助手。
 
@@ -34,11 +35,12 @@
 - 把确认过的 patch 草案安全写回本地工作区，并避免覆盖已变化的文件
 - 自动发现并运行安全白名单内的 lint/test 检查，直接返回 stdout / stderr 摘要
 - 一键完成 patch 写回和默认 checks 验证，并把结果汇总回工作台
+- 根据改动文件路径自动推荐更相关的 checks 组合，并在前端直接使用推荐结果
 
 当前仍未实现：
 
 - GitHub 仓库克隆
-- 根据改动范围自动挑选更精细的 checks 集合
+- 更细粒度地结合 diff 内容、语言和目录结构推荐 checks
 - 语义检索、rerank 和 AST 级符号定位增强
 - benchmark 样例、系统化评测和 trace 可视化
 
@@ -142,6 +144,7 @@
 - Patch 草案表单与 diff 预览
 - Checks 面板与结果摘要
 - 一键应用并验证入口
+- 推荐 checks 展示与一键使用入口
 
 ## 数据模型
 
@@ -253,6 +256,7 @@
 ### Checks 接口
 
 - `GET /api/checks/repositories/{repo_id}/profiles`
+- `POST /api/checks/recommend`
 - `POST /api/checks/run`
 
 请求示例：
@@ -375,6 +379,37 @@
 }
 ```
 
+`POST /api/checks/recommend` 请求示例：
+
+```json
+{
+  "repo_id": 1,
+  "changed_paths": ["frontend/app/page.tsx"]
+}
+```
+
+返回结构：
+
+```json
+{
+  "repo_id": 1,
+  "changed_paths": ["frontend/app/page.tsx"],
+  "strategy": "matched",
+  "summary": "Recommended 2 checks based on 1 changed path(s).",
+  "items": [
+    {
+      "id": "frontend_npm-typecheck",
+      "name": "TypeScript Typecheck (frontend)",
+      "category": "typecheck",
+      "working_dir": "E:/repo/frontend",
+      "command_preview": "npm run typecheck",
+      "reason": "`frontend/app/page.tsx` is inside `frontend/`. Frontend file changes should run npm checks.",
+      "score": 10
+    }
+  ]
+}
+```
+
 `POST /api/checks/run` 请求示例：
 
 ```json
@@ -414,6 +449,7 @@
 - 当前只运行自动发现的白名单检查，不支持用户自定义任意命令
 - Python 侧目前优先识别 `python -m pytest tests`
 - Node 侧目前优先识别 `npm run typecheck`、`npm run lint`、`npm run test`
+- 推荐逻辑当前主要基于目标文件路径、目录范围和语言后缀，匹配不到时会回退到全部已发现检查
 - 输出过长时会截断，优先保证 API 响应稳定
 
 返回结构：
@@ -610,6 +646,7 @@ python -m pytest
 - patch 应用接口：只在基线内容未变化时把草案写回工作区
 - checks 接口：发现并运行白名单 lint/test 命令，返回结果摘要
 - apply-and-checks 接口：把 patch 写回和检查执行串成一次请求
+- checks 推荐接口：按改动路径返回更相关的 checks 组合与原因
 
 ## 设计取舍
 
@@ -627,7 +664,7 @@ python -m pytest
 
 下一阶段建议优先实现：
 
-1. 根据改动范围自动推荐更合适的 checks 组合
+1. 结合 diff 内容和失败历史，进一步优化 checks 推荐准确度
 2. 增加 benchmark 样例与问答评测
 3. 引入更稳妥的检索策略，例如 embedding 和 rerank
 4. 支持多文件 patch 草案与分步确认

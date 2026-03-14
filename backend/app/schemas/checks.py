@@ -21,6 +21,24 @@ class CheckProfileListResponse(BaseModel):
     items: list[CheckProfileRead]
 
 
+class CheckRecommendationRequest(BaseModel):
+    repo_id: int
+    changed_paths: list[str] = Field(default_factory=list)
+
+
+class CheckRecommendationItem(CheckProfileRead):
+    reason: str
+    score: int
+
+
+class CheckRecommendationResponse(BaseModel):
+    repo_id: int
+    changed_paths: list[str]
+    strategy: Literal["matched", "fallback_all", "none"]
+    summary: str
+    items: list[CheckRecommendationItem]
+
+
 class CheckRunRequest(BaseModel):
     repo_id: int
     profile_ids: list[str] | None = Field(default=None)

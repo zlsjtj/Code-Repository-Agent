@@ -10,6 +10,7 @@ type PatchDraftPanelProps = {
   isDrafting: boolean;
   isApplying: boolean;
   isApplyingAndChecking: boolean;
+  recommendedCheckCount: number;
   onDraft: (repoId: number, targetPath: string, instruction: string) => Promise<void> | void;
   onApply: (response: PatchDraftResponse) => Promise<void> | void;
   onApplyAndCheck: (response: PatchDraftResponse) => Promise<void> | void;
@@ -23,6 +24,7 @@ export function PatchDraftPanel({
   isDrafting,
   isApplying,
   isApplyingAndChecking,
+  recommendedCheckCount,
   onDraft,
   onApply,
   onApplyAndCheck,
@@ -204,7 +206,11 @@ export function PatchDraftPanel({
                 onClick={() => onApplyAndCheck(response)}
                 type="button"
               >
-                {isApplyingAndChecking ? "应用并验证中..." : "应用并运行默认检查"}
+                {isApplyingAndChecking
+                  ? "应用并验证中..."
+                  : recommendedCheckCount > 0
+                    ? `应用并运行推荐检查 (${recommendedCheckCount})`
+                    : "应用并运行默认检查"}
               </button>
               <div className="field-help">
                 应用前会校验文件基线哈希；如果文件已经变化，后端会拒绝写入，避免覆盖未预览的新内容。

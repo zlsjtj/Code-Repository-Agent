@@ -521,6 +521,13 @@ select {
   background: rgba(255, 255, 255, 0.55);
 }
 
+.recommendation-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(31, 93, 80, 0.18);
+  background: rgba(31, 93, 80, 0.06);
+}
+
 .diff-output {
   margin: 12px 0 0;
   padding: 14px;

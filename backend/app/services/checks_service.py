@@ -15,6 +15,9 @@ from app.schemas.checks import (
     CheckExecutionResult,
     CheckProfileListResponse,
     CheckProfileRead,
+    CheckRecommendationItem,
+    CheckRecommendationRequest,
+    CheckRecommendationResponse,
     CheckRunRequest,
     CheckRunResponse,
 )
@@ -97,6 +100,88 @@ class CheckService:
             status=status,
             summary=summary,
             results=results,
+        )
+
+    def recommend_profiles(self, payload: CheckRecommendationRequest) -> CheckRecommendationResponse:
+        repository = self.repository_service.get_repository(payload.repo_id)
+        profiles = self._discover_profiles(repository.id)
+        normalized_paths = [self._normalize_repo_path(path) for path in payload.changed_paths if path.strip()]
+
+        if not profiles:
+            return CheckRecommendationResponse(
+                repo_id=payload.repo_id,
+                changed_paths=normalized_paths,
+                strategy="none",
+                summary="No safe check profiles were discovered for this repository yet.",
+                items=[],
+            )
+
+        if not normalized_paths:
+            return CheckRecommendationResponse(
+                repo_id=payload.repo_id,
+                changed_paths=[],
+                strategy="fallback_all",
+                summary="No changed paths were provided, so all discovered checks are recommended.",
+                items=[
+                    CheckRecommendationItem(
+                        id=profile.id,
+                        name=profile.name,
+                        category=profile.category,
+                        working_dir=profile.working_dir.as_posix(),
+                        command_preview=profile.command_preview,
+                        reason="No changed paths were provided.",
+                        score=0,
+                    )
+                    for profile in profiles
+                ],
+            )
+
+        root = self.repository_service.resolve_local_root(repository)
+        scored: list[tuple[int, ResolvedCheckProfile, str]] = []
+        for profile in profiles:
+            score, reason = self._score_profile(profile, normalized_paths, root=root)
+            if score > 0:
+                scored.append((score, profile, reason))
+
+        if not scored:
+            return CheckRecommendationResponse(
+                repo_id=payload.repo_id,
+                changed_paths=normalized_paths,
+                strategy="fallback_all",
+                summary="No path-specific match was found, so all discovered checks are recommended.",
+                items=[
+                    CheckRecommendationItem(
+                        id=profile.id,
+                        name=profile.name,
+                        category=profile.category,
+                        working_dir=profile.working_dir.as_posix(),
+                        command_preview=profile.command_preview,
+                        reason="No path-specific match was found.",
+                        score=0,
+                    )
+                    for profile in profiles
+                ],
+            )
+
+        scored.sort(key=lambda entry: (-entry[0], entry[1].id))
+        items = [
+            CheckRecommendationItem(
+                id=profile.id,
+                name=profile.name,
+                category=profile.category,
+                working_dir=profile.working_dir.as_posix(),
+                command_preview=profile.command_preview,
+                reason=reason,
+                score=score,
+            )
+            for score, profile, reason in scored
+        ]
+        return CheckRecommendationResponse(
+            repo_id=payload.repo_id,
+            changed_paths=normalized_paths,
+            strategy="matched",
+            summary=f"Recommended {len(items)} checks based on {len(normalized_paths)} changed path(s).",
+            items=items,
         )
 
     def _discover_profiles(self, repo_id: int) -> list[ResolvedCheckProfile]:
@@ -260,3 +345,52 @@ class CheckService:
         if directory == root:
             return "root"
         return directory.relative_to(root).as_posix()
+
+    def _normalize_repo_path(self, value: str) -> str:
+        return value.strip().strip("/").replace("\\", "/")
+
+    def _score_profile(
+        self,
+        profile: ResolvedCheckProfile,
+        changed_paths: list[str],
+        *,
+        root: Path,
+    ) -> tuple[int, str]:
+        profile_scope = self._display_dir(root, profile.working_dir)
+        score = 0
+        reasons: list[str] = []
+
+        for changed_path in changed_paths:
+            suffix = Path(changed_path).suffix.lower()
+            is_python_change = suffix == ".py"
+            is_frontend_change = suffix in {".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".mjs", ".cjs"}
+
+            if profile_scope != "root" and (
+                changed_path == profile_scope or changed_path.startswith(f"{profile_scope}/")
+            ):
+                score += 6
+                reasons.append(f"`{changed_path}` is inside `{profile_scope}/`.")
+            elif profile_scope == "root" and "/" not in changed_path:
+                score += 2
+                reasons.append(f"`{changed_path}` is at the repository root.")
+
+            if profile.id.endswith("pytest") and is_python_change:
+                score += 3
+                reasons.append("Python file changes should run pytest.")
+
+            if "npm-" in profile.id and is_frontend_change:
+                score += 3
+                reasons.append("Frontend file changes should run npm checks.")
+                if profile.category == "typecheck" and suffix in {".ts", ".tsx"}:
+                    score += 1
+                    reasons.append("TypeScript file changes should run typecheck.")
+
+        if not reasons:
+            return 0, ""
+
+        deduped_reasons: list[str] = []
+        for reason in reasons:
+            if reason not in deduped_reasons:
+                deduped_reasons.append(reason)
+
+        return score, " ".join(deduped_reasons[:2])

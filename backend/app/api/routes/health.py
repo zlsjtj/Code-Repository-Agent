@@ -37,5 +37,6 @@ def get_meta() -> MetaResponse:
             "patch_apply",
             "checks_runner",
             "apply_and_verify",
+            "checks_recommendation",
         ],
     )

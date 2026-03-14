@@ -166,6 +166,24 @@ export type CheckProfileListResponse = {
   items: CheckProfile[];
 };
 
+export type CheckRecommendationItem = CheckProfile & {
+  reason: string;
+  score: number;
+};
+
+export type CheckRecommendationPayload = {
+  repo_id: number;
+  changed_paths: string[];
+};
+
+export type CheckRecommendationResponse = {
+  repo_id: number;
+  changed_paths: string[];
+  strategy: "matched" | "fallback_all" | "none";
+  summary: string;
+  items: CheckRecommendationItem[];
+};
+
 export type CheckRunPayload = {
   repo_id: number;
   profile_ids?: string[];
