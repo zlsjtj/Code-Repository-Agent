@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-repo-agent-backend"
+version = "0.1.0"
+description = "FastAPI backend for the code repository Q&A assistant."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "pydantic-settings",
+  "sqlalchemy",
+  "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx",
+  "pytest",
+]
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
