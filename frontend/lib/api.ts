@@ -3,6 +3,8 @@ import type {
   ChatAskResponse,
   HealthResponse,
   MetaResponse,
+  PatchDraftPayload,
+  PatchDraftResponse,
   RepositoryCreatePayload,
   RepositoryIndexResponse,
   RepositoryListResponse,
@@ -62,6 +64,13 @@ export function indexRepository(repoId: number) {
 
 export function askRepositoryQuestion(payload: ChatAskPayload) {
   return request<ChatAskResponse>("/api/chat/ask", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
+export function createPatchDraft(payload: PatchDraftPayload) {
+  return request<PatchDraftResponse>("/api/patches/draft", {
     body: JSON.stringify(payload),
     method: "POST",
   });

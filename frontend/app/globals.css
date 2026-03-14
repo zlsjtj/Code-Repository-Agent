@@ -346,7 +346,8 @@ select {
 
 .answer-card,
 .trace-card,
-.citation-card {
+.citation-card,
+.diff-card {
   padding: 16px;
   border-radius: 18px;
   border: 1px solid var(--line);
@@ -390,7 +391,9 @@ select {
 .citation-list,
 .trace-step-list,
 .summary-grid,
-.session-list {
+.session-list,
+.patch-stack,
+.patch-warning-list {
   display: grid;
   gap: 12px;
 }
@@ -481,6 +484,58 @@ select {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.patch-copy,
+.patch-rationale {
+  margin-top: 10px;
+  line-height: 1.7;
+}
+
+.patch-rationale {
+  color: var(--muted);
+}
+
+.warning-banner {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(140, 90, 25, 0.22);
+  background: rgba(140, 90, 25, 0.09);
+  color: var(--warning);
+}
+
+.diff-preview {
+  margin-top: 12px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(36, 28, 18, 0.08);
+  background: #1b1a17;
+}
+
+.diff-line {
+  padding: 4px 12px;
+  color: #f5efe3;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-line.is-added {
+  background: rgba(31, 93, 80, 0.38);
+}
+
+.diff-line.is-removed {
+  background: rgba(140, 90, 25, 0.32);
+}
+
+.diff-line.is-hunk {
+  background: rgba(38, 74, 98, 0.45);
+}
+
+.diff-line.is-file {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 @media (max-width: 960px) {

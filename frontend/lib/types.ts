@@ -94,3 +94,31 @@ export type WorkspaceChatEntry = {
   repository_language: string | null;
   response: ChatAskResponse;
 };
+
+export type PatchDraftPayload = {
+  repo_id: number;
+  target_path: string;
+  instruction: string;
+  session_id?: string;
+};
+
+export type PatchDraftTraceSummary = {
+  agent_name: string;
+  model: string;
+  latency_ms: number;
+};
+
+export type PatchDraftResponse = {
+  session_id: string;
+  repo_id: number;
+  target_path: string;
+  summary: string;
+  rationale: string;
+  warnings: string[];
+  original_line_count: number;
+  proposed_line_count: number;
+  line_count_delta: number;
+  unified_diff: string;
+  proposed_content: string;
+  trace_summary: PatchDraftTraceSummary;
+};

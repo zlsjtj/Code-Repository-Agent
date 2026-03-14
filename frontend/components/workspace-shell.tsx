@@ -5,10 +5,12 @@ import { startTransition, useEffect, useState } from "react";
 import { ChatHistoryPanel } from "@/components/chat/chat-history-panel";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { CitationPanel } from "@/components/citations/citation-panel";
+import { PatchDraftPanel } from "@/components/patches/patch-draft-panel";
 import { RepositoryImportForm } from "@/components/repositories/repository-import-form";
 import { RepositoryList } from "@/components/repositories/repository-list";
 import {
   askRepositoryQuestion,
+  createPatchDraft,
   createRepository,
   fetchHealth,
   fetchMeta,
@@ -19,6 +21,7 @@ import type {
   ChatAskResponse,
   HealthResponse,
   MetaResponse,
+  PatchDraftResponse,
   RepositoryCreatePayload,
   RepositoryIndexResponse,
   RepositoryRecord,
@@ -30,14 +33,17 @@ export function WorkspaceShell() {
   const [meta, setMeta] = useState<MetaResponse | null>(null);
   const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
   const [chatResponse, setChatResponse] = useState<ChatAskResponse | null>(null);
+  const [patchResponse, setPatchResponse] = useState<PatchDraftResponse | null>(null);
   const [chatHistory, setChatHistory] = useState<WorkspaceChatEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
+  const [isDraftingPatch, setIsDraftingPatch] = useState(false);
   const [indexingRepoId, setIndexingRepoId] = useState<number | null>(null);
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
+  const [activeChatRepoId, setActiveChatRepoId] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -105,6 +111,17 @@ export function WorkspaceShell() {
   const selectedRepository =
     repositories.find((repository) => repository.id === selectedRepoId) ?? null;
   const citedSessionCount = chatHistory.filter((entry) => entry.response.citations.length > 0).length;
+  const suggestedPatchPath =
+    activeChatRepoId === selectedRepoId ? chatResponse?.citations[0]?.path ?? null : null;
+
+  useEffect(() => {
+    setPatchResponse((current) => {
+      if (!current) {
+        return current;
+      }
+      return current.repo_id === selectedRepoId ? current : null;
+    });
+  }, [selectedRepoId]);
 
   async function handleRepositorySubmit(payload: RepositoryCreatePayload) {
     setIsSubmitting(true);
@@ -159,6 +176,7 @@ export function WorkspaceShell() {
       const response = await askRepositoryQuestion({ repo_id: repoId, question });
       const repository = repositories.find((item) => item.id === repoId);
       setChatResponse(response);
+      setActiveChatRepoId(repoId);
       setSelectedRepoId(repoId);
       setChatHistory((current) => [
         {
@@ -180,8 +198,30 @@ export function WorkspaceShell() {
     }
   }
 
+  async function handleDraftPatch(repoId: number, targetPath: string, instruction: string) {
+    setIsDraftingPatch(true);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await createPatchDraft({
+        instruction,
+        repo_id: repoId,
+        target_path: targetPath,
+      });
+      setPatchResponse(response);
+      setSelectedRepoId(repoId);
+      setStatusMessage(`patch 草案已生成：${response.target_path}`);
+    } catch (draftError) {
+      setError(draftError instanceof Error ? draftError.message : "Unable to draft the patch.");
+    } finally {
+      setIsDraftingPatch(false);
+    }
+  }
+
   function handleSelectHistory(entry: WorkspaceChatEntry) {
     setSelectedRepoId(entry.repository_id);
+    setActiveChatRepoId(entry.repository_id);
     setChatResponse(entry.response);
     setStatusMessage(`已切换到历史会话：${entry.repository_name}`);
   }
@@ -189,10 +229,10 @@ export function WorkspaceShell() {
   return (
     <main className="page-shell">
       <section className="hero-card">
-        <p className="eyebrow">Stage 5 Workspace</p>
+        <p className="eyebrow">Stage 6 Patch Drafts</p>
         <h1 className="hero-title">代码库问答与改动助手</h1>
         <p className="hero-copy">
-          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据和最近会话整理进一个连续工作台，便于我们围绕同一份代码库持续分析。
+          当前阶段已经接入 OpenAI Agents SDK，并把仓库上下文、问答结果、引用证据、最近会话和 patch 草案预览整理进一个连续工作台，便于我们围绕同一份代码库持续分析和准备改动。
         </p>
         <div className="hero-badges">
           {meta?.features?.map((feature) => (
@@ -293,6 +333,13 @@ export function WorkspaceShell() {
             repositories={repositories}
             response={chatResponse}
             selectedRepoId={selectedRepoId}
+          />
+          <PatchDraftPanel
+            isDrafting={isDraftingPatch}
+            onDraft={handleDraftPatch}
+            response={patchResponse}
+            selectedRepository={selectedRepository}
+            suggestedPath={suggestedPatchPath}
           />
           <CitationPanel response={chatResponse} />
         </div>

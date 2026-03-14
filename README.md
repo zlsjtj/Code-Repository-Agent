@@ -1,12 +1,13 @@
 # 代码库问答与改动助手（AI Agent）
 
-面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经完成前五阶段中的前四层核心能力，并把问答工作台从“能跑通”推进到了“可连续使用”：
+面向本地代码仓库与 GitHub 仓库的工程化 AI Agent 项目。当前已经完成前六阶段中的前五层核心能力，并把工作台继续推进到了“能生成 patch 草案预览”：
 
 - 第一阶段：项目骨架、FastAPI、Next.js、SQLite schema、健康检查、仓库导入
 - 第二阶段：本地仓库扫描、文件树接口、基础 chunk 索引、索引状态与调试查询
 - 第三阶段：`list_repo_tree`、`search_repo`、`read_file`、`find_symbol` 工具与统一返回结构
 - 第四阶段：OpenAI Agents SDK 问答主流程、`/api/chat/ask`、引用返回与 `ConversationTrace` 落库
 - 第五阶段：前端工作台增强，补当前仓库上下文、最近会话切换、引用摘要和更完整的问答展示
+- 第六阶段：单文件 patch 草案、unified diff 预览，以及前端 patch 工作区
 
 项目目标不是做一个“会聊天的网页”，而是做一个“能围绕代码任务调用工具、引用证据、逐步扩展到改动建议和检查闭环”的代码助手。
 
@@ -26,6 +27,7 @@
 - 通过 OpenAI Agents SDK 自动调用工具并返回带引用的回答
 - 持久化问答 trace，包括工具调用摘要、引用和最终答案
 - 在前端页面内保留最近会话，支持切回历史回答继续查看引用
+- 生成单文件 patch 草案，并在前端直接预览 unified diff
 
 当前仍未实现：
 
@@ -131,6 +133,7 @@
 - 当前仓库上下文面板
 - 问答区、引用区和 trace 摘要
 - 页面内最近会话历史切换
+- Patch 草案表单与 diff 预览
 
 ## 数据模型
 
@@ -232,6 +235,52 @@
 ### 问答接口
 
 - `POST /api/chat/ask`
+
+### Patch 草案接口
+
+- `POST /api/patches/draft`
+
+请求示例：
+
+```json
+{
+  "repo_id": 1,
+  "target_path": "backend/app/services/chat_service.py",
+  "instruction": "在不改变现有接口的前提下，补一个更明确的错误提示。"
+}
+```
+
+返回结构：
+
+```json
+{
+  "session_id": "86f7...",
+  "repo_id": 1,
+  "target_path": "backend/app/services/chat_service.py",
+  "summary": "补强配置错误提示。",
+  "rationale": "只改动错误消息，避免影响主流程。",
+  "warnings": [
+    "当前只生成草案，还没有把 patch 写回仓库。"
+  ],
+  "original_line_count": 98,
+  "proposed_line_count": 101,
+  "line_count_delta": 3,
+  "unified_diff": "--- a/backend/app/services/chat_service.py\n+++ b/backend/app/services/chat_service.py\n@@ ...",
+  "proposed_content": "...",
+  "trace_summary": {
+    "agent_name": "PatchDraftAssistant",
+    "model": "gpt-4.1-mini",
+    "latency_ms": 980
+  }
+}
+```
+
+说明：
+
+- 当前 patch 草案只支持本地仓库
+- 当前 patch 草案只处理单个现有文本文件
+- 返回的是预览结果，不会自动把文件写回工作区
+- 文件大小默认限制在 `500` 行、`20,000` 字符以内，优先保证草案稳定性
 
 请求示例：
 
@@ -408,6 +457,7 @@ python -m pytest
 - 索引写入与状态查询
 - 工具接口：目录树、检索、读文件、找符号
 - 问答接口：返回回答、引用，并写入 `ConversationTrace`
+- patch 草案接口：返回 unified diff 和完整草案内容
 
 ## 设计取舍
 
@@ -425,7 +475,7 @@ python -m pytest
 
 下一阶段建议优先实现：
 
-1. 增加 patch 草案与 diff 预览
+1. 把 patch 草案升级为可选择“应用到工作区”的安全流程
 2. 增加 benchmark 样例与问答评测
 3. 引入更稳妥的检索策略，例如 embedding 和 rerank
 4. 增加 lint/test 闭环

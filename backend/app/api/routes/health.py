@@ -33,5 +33,6 @@ def get_meta() -> MetaResponse:
             "code_assistant_agent",
             "conversation_trace",
             "frontend_workspace",
+            "patch_draft_preview",
         ],
     )
