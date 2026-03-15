@@ -23,6 +23,7 @@ export function CitationPanel({ locale, response }: CitationPanelProps) {
       )
     : [];
   const traceLabel = locale === "zh-CN" ? "工具调用摘要" : "Tool trace summary";
+  const evidenceLabel = locale === "zh-CN" ? "证据片段" : "Evidence snippets";
 
   return (
     <section className="panel-card">
@@ -81,38 +82,46 @@ export function CitationPanel({ locale, response }: CitationPanelProps) {
               <div className="placeholder-copy">{copy.citations.noCitations}</div>
             </div>
           ) : (
-            <div className="citation-list">
-              {groupedCitations.map(([path, items]) => (
-                <article className="citation-file-card" key={path}>
-                  <div className="citation-card-header">
-                    <div className="citation-path">{path}</div>
-                    <span className="meta-pill">{items.length}</span>
-                  </div>
-                  <div className="citation-file-list">
-                    {items.map((citation, index) => (
-                      <article className="citation-card" key={`${path}-${index}`}>
-                        <div className="citation-card-header">
-                          <div className="citation-index">#{index + 1}</div>
-                          <div className="citation-path">
-                            {citation.start_line ? `L${citation.start_line}` : path}
-                            {citation.end_line && citation.end_line !== citation.start_line
-                              ? `-${citation.end_line}`
-                              : ""}
+            <details className="trace-card trace-card-collapsible" open>
+              <summary className="trace-summary-row">
+                <div>
+                  <div className="answer-label">{evidenceLabel}</div>
+                  <div className="trace-meta">{response.citations.length}</div>
+                </div>
+              </summary>
+              <div className="citation-list">
+                {groupedCitations.map(([path, items]) => (
+                  <article className="citation-file-card" key={path}>
+                    <div className="citation-card-header">
+                      <div className="citation-path">{path}</div>
+                      <span className="meta-pill">{items.length}</span>
+                    </div>
+                    <div className="citation-file-list">
+                      {items.map((citation, index) => (
+                        <article className="citation-card" key={`${path}-${index}`}>
+                          <div className="citation-card-header">
+                            <div className="citation-index">#{index + 1}</div>
+                            <div className="citation-path">
+                              {citation.start_line ? `L${citation.start_line}` : path}
+                              {citation.end_line && citation.end_line !== citation.start_line
+                                ? `-${citation.end_line}`
+                                : ""}
+                            </div>
                           </div>
-                        </div>
-                        <div className="citation-note">{citation.note}</div>
-                        {citation.symbol ? (
-                          <div className="citation-meta">
-                            {copy.citations.symbolPrefix}: {citation.symbol}
-                          </div>
-                        ) : null}
-                        {citation.excerpt ? <pre className="citation-excerpt">{citation.excerpt}</pre> : null}
-                      </article>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
+                          <div className="citation-note">{citation.note}</div>
+                          {citation.symbol ? (
+                            <div className="citation-meta">
+                              {copy.citations.symbolPrefix}: {citation.symbol}
+                            </div>
+                          ) : null}
+                          {citation.excerpt ? <pre className="citation-excerpt">{citation.excerpt}</pre> : null}
+                        </article>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </details>
           )}
         </div>
       )}

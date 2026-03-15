@@ -37,6 +37,7 @@ export function WorkspaceShell() {
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<WorkspaceView>("chat");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const copy = getWorkspaceCopy(locale);
 
   const repositoriesWorkspace = useWorkspaceRepositories({
@@ -89,6 +90,10 @@ export function WorkspaceShell() {
   ];
 
   const activeTab = tabs.find((tab) => tab.id === activeView) ?? tabs[0];
+  const drawerCopy =
+    locale === "zh-CN"
+      ? { open: "仓库与任务", close: "关闭侧栏" }
+      : { open: "Repos and jobs", close: "Close sidebar" };
   const stageGuideCopy =
     locale === "zh-CN"
       ? {
@@ -234,7 +239,29 @@ export function WorkspaceShell() {
       {statusMessage ? <div className="success-banner">{statusMessage}</div> : null}
 
       <section className="workspace-layout">
-        <aside className="workspace-sidebar">
+        <button
+          aria-expanded={isSidebarOpen}
+          className="workspace-sidebar-toggle"
+          onClick={() => setIsSidebarOpen(true)}
+          type="button"
+        >
+          {drawerCopy.open}
+        </button>
+        {isSidebarOpen ? (
+          <button
+            aria-label={drawerCopy.close}
+            className="workspace-sidebar-backdrop"
+            onClick={() => setIsSidebarOpen(false)}
+            type="button"
+          />
+        ) : null}
+        <aside className={`workspace-sidebar ${isSidebarOpen ? "is-open" : ""}`.trim()}>
+          <div className="workspace-sidebar-mobile-bar">
+            <div className="focus-card-label">{drawerCopy.open}</div>
+            <button className="button-secondary compact-button" onClick={() => setIsSidebarOpen(false)} type="button">
+              {drawerCopy.close}
+            </button>
+          </div>
           <section className="panel-card context-card">
             <div className="context-card-header">
               <div>
@@ -288,7 +315,10 @@ export function WorkspaceShell() {
             isLoading={repositoriesWorkspace.isLoading}
             locale={locale}
             onIndex={repositoriesWorkspace.handleIndexRepository}
-            onSelect={repositoriesWorkspace.setSelectedRepoId}
+            onSelect={(repoId) => {
+              repositoriesWorkspace.setSelectedRepoId(repoId);
+              setIsSidebarOpen(false);
+            }}
             repositories={repositoriesWorkspace.repositories}
             selectedRepoId={repositoriesWorkspace.selectedRepoId}
           />
@@ -296,7 +326,10 @@ export function WorkspaceShell() {
             jobs={repositoriesWorkspace.recentJobs}
             locale={locale}
             onRetry={repositoriesWorkspace.handleRetryJob}
-            onSelectRepository={repositoriesWorkspace.setSelectedRepoId}
+            onSelectRepository={(repoId) => {
+              repositoriesWorkspace.setSelectedRepoId(repoId);
+              setIsSidebarOpen(false);
+            }}
             repositories={repositoriesWorkspace.repositories}
             retryingJobId={repositoriesWorkspace.retryingJobId}
             selectedRepoId={repositoriesWorkspace.selectedRepoId}
@@ -306,7 +339,10 @@ export function WorkspaceShell() {
               activeSessionId={chatWorkspace.chatResponse?.session_id ?? null}
               entries={chatWorkspace.chatHistory}
               locale={locale}
-              onSelectSession={chatWorkspace.handleSelectHistory}
+              onSelectSession={(entry) => {
+                chatWorkspace.handleSelectHistory(entry);
+                setIsSidebarOpen(false);
+              }}
             />
           ) : null}
         </aside>
