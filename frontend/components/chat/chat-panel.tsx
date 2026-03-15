@@ -15,6 +15,8 @@ type ChatPanelProps = {
   isAsking: boolean;
   locale: WorkspaceLocale;
   onAsk: (repoId: number, question: string) => Promise<void> | void;
+  onOpenPatch: () => void;
+  onOpenChecks: () => void;
   onSelectRepo: (repoId: number) => void;
   response: ChatAskResponse | null;
   historyCount: number;
@@ -26,11 +28,23 @@ export function ChatPanel({
   isAsking,
   locale,
   onAsk,
+  onOpenPatch,
+  onOpenChecks,
   onSelectRepo,
   response,
   historyCount,
 }: ChatPanelProps) {
   const copy = getWorkspaceCopy(locale);
+  const actionCopy =
+    locale === "zh-CN"
+      ? {
+          patch: "基于这次回答起草改动",
+          checks: "查看检查面板",
+        }
+      : {
+          patch: "Draft a patch from this answer",
+          checks: "Open checks",
+        };
   const availableRepositories = repositories.filter(
     (repository) => Boolean(repository.root_path) && repository.status === "ready",
   );
@@ -153,6 +167,14 @@ export function ChatPanel({
             </div>
           </div>
           <pre className="answer-body">{response.answer}</pre>
+          <div className="button-row top-gap">
+            <button className="button-primary" onClick={onOpenPatch} type="button">
+              {actionCopy.patch}
+            </button>
+            <button className="button-secondary" onClick={onOpenChecks} type="button">
+              {actionCopy.checks}
+            </button>
+          </div>
         </div>
       ) : null}
     </section>

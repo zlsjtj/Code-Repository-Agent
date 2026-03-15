@@ -25,6 +25,8 @@ type ChecksPanelProps = {
   recommendation: CheckRecommendationResponse | null;
   response: CheckRunResponse | null;
   patchApplyResponse: PatchApplyResponse | null;
+  onOpenChat: () => void;
+  onOpenPatch: () => void;
   onRunChecks: (profileIds?: string[]) => Promise<void> | void;
 };
 
@@ -38,9 +40,27 @@ export function ChecksPanel({
   recommendation,
   response,
   patchApplyResponse,
+  onOpenChat,
+  onOpenPatch,
   onRunChecks,
 }: ChecksPanelProps) {
   const copy = getWorkspaceCopy(locale);
+  const resultActionCopy =
+    locale === "zh-CN"
+      ? {
+          backToPatch: "回到改动草案",
+          askFollowUp: "回到问答继续排查",
+          failedGroup: "需要处理",
+          passedGroup: "已通过",
+        }
+      : {
+          backToPatch: "Back to patch",
+          askFollowUp: "Return to chat",
+          failedGroup: "Needs attention",
+          passedGroup: "Passed",
+        };
+  const failedResults = response?.results.filter((result) => result.status !== "passed") ?? [];
+  const passedResults = response?.results.filter((result) => result.status === "passed") ?? [];
 
   return (
     <section className="panel-card">
@@ -166,26 +186,63 @@ export function ChecksPanel({
               </div>
             </div>
             <div className="patch-copy">{response.summary}</div>
+            <div className="button-row top-gap">
+              <button className="button-primary" onClick={onOpenPatch} type="button">
+                {resultActionCopy.backToPatch}
+              </button>
+              <button className="button-secondary" onClick={onOpenChat} type="button">
+                {resultActionCopy.askFollowUp}
+              </button>
+            </div>
           </div>
 
-          <div className="check-result-list">
-            {response.results.map((result) => (
-              <article className="diff-card" key={result.id}>
-                <div className="answer-header">
-                  <div className="answer-label">{result.name}</div>
-                  <div className="meta-pill-row">
-                    <span className="meta-pill">{formatCheckStatus(locale, result.status)}</span>
-                    <span className="meta-pill">{result.duration_ms} ms</span>
-                    <span className="meta-pill">{result.exit_code ?? "-"}</span>
-                  </div>
-                </div>
-                <div className="citation-meta">{result.command_preview}</div>
-                {result.stdout ? <pre className="diff-output diff-output-stdout">{result.stdout}</pre> : null}
-                {result.stderr ? <pre className="diff-output diff-output-stderr">{result.stderr}</pre> : null}
-                {result.truncated ? <div className="field-help">{copy.checks.truncated}</div> : null}
-              </article>
-            ))}
-          </div>
+          {failedResults.length > 0 ? (
+            <div className="results-group">
+              <div className="results-group-title">{resultActionCopy.failedGroup}</div>
+              <div className="check-result-list">
+                {failedResults.map((result) => (
+                  <article className="diff-card" key={result.id}>
+                    <div className="answer-header">
+                      <div className="answer-label">{result.name}</div>
+                      <div className="meta-pill-row">
+                        <span className="meta-pill">{formatCheckStatus(locale, result.status)}</span>
+                        <span className="meta-pill">{result.duration_ms} ms</span>
+                        <span className="meta-pill">{result.exit_code ?? "-"}</span>
+                      </div>
+                    </div>
+                    <div className="citation-meta">{result.command_preview}</div>
+                    {result.stdout ? <pre className="diff-output diff-output-stdout">{result.stdout}</pre> : null}
+                    {result.stderr ? <pre className="diff-output diff-output-stderr">{result.stderr}</pre> : null}
+                    {result.truncated ? <div className="field-help">{copy.checks.truncated}</div> : null}
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {passedResults.length > 0 ? (
+            <div className="results-group">
+              <div className="results-group-title">{resultActionCopy.passedGroup}</div>
+              <div className="check-result-list">
+                {passedResults.map((result) => (
+                  <article className="diff-card" key={result.id}>
+                    <div className="answer-header">
+                      <div className="answer-label">{result.name}</div>
+                      <div className="meta-pill-row">
+                        <span className="meta-pill">{formatCheckStatus(locale, result.status)}</span>
+                        <span className="meta-pill">{result.duration_ms} ms</span>
+                        <span className="meta-pill">{result.exit_code ?? "-"}</span>
+                      </div>
+                    </div>
+                    <div className="citation-meta">{result.command_preview}</div>
+                    {result.stdout ? <pre className="diff-output diff-output-stdout">{result.stdout}</pre> : null}
+                    {result.stderr ? <pre className="diff-output diff-output-stderr">{result.stderr}</pre> : null}
+                    {result.truncated ? <div className="field-help">{copy.checks.truncated}</div> : null}
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

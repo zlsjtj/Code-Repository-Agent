@@ -446,6 +446,11 @@ select {
   padding: 22px;
 }
 
+.workflow-guide-card {
+  border-color: rgba(31, 93, 80, 0.18);
+  background: linear-gradient(180deg, rgba(31, 93, 80, 0.08), rgba(255, 255, 255, 0.62));
+}
+
 .panel-title {
   margin: 0 0 8px;
   font-size: 1.2rem;
@@ -776,6 +781,7 @@ select {
 
 .citation-stack,
 .citation-list,
+.citation-file-list,
 .trace-step-list,
 .summary-grid,
 .session-list,
@@ -793,6 +799,39 @@ select {
 .trace-step-copy {
   color: var(--muted);
   line-height: 1.6;
+}
+
+.trace-card-collapsible[open] {
+  padding-bottom: 16px;
+}
+
+.trace-summary-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.trace-summary-row::-webkit-details-marker {
+  display: none;
+}
+
+.trace-section-label,
+.results-group-title {
+  margin: 16px 0 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.citation-file-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .signal-pill,
@@ -929,6 +968,11 @@ select {
   border-radius: 18px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.55);
+}
+
+.results-group {
+  display: grid;
+  gap: 12px;
 }
 
 .recommendation-card {

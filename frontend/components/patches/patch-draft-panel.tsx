@@ -28,6 +28,8 @@ type PatchDraftPanelProps = {
   recommendedCheckCount: number;
   locale: WorkspaceLocale;
   onDraft: (repoId: number, targetPaths: string[], instruction: string) => Promise<void> | void;
+  onOpenChat: () => void;
+  onOpenChecks: () => void;
   onApply: (response: PatchDraftResponse) => Promise<void> | void;
   onApplyBatch: (repoId: number, drafts: PatchDraftFile[]) => Promise<void> | void;
   onApplyBatchAndCheck: (repoId: number, drafts: PatchDraftFile[]) => Promise<void> | void;
@@ -190,6 +192,8 @@ export function PatchDraftPanel({
   recommendedCheckCount,
   locale,
   onDraft,
+  onOpenChat,
+  onOpenChecks,
   onApply,
   onApplyBatch,
   onApplyBatchAndCheck,
@@ -200,6 +204,18 @@ export function PatchDraftPanel({
   batchApplyResponse,
 }: PatchDraftPanelProps) {
   const copy = getWorkspaceCopy(locale);
+  const actionCopy =
+    locale === "zh-CN"
+      ? {
+          askFirst: "回到问答补充上下文",
+          verifyNow: "去检查面板验证",
+          fileScope: "文件范围",
+        }
+      : {
+          askFirst: "Return to chat",
+          verifyNow: "Go verify in checks",
+          fileScope: "File scope",
+        };
   const [targetPathsInput, setTargetPathsInput] = useState("");
   const [instruction, setInstruction] = useState(copy.patch.defaultInstruction);
   const [selectedBatchPaths, setSelectedBatchPaths] = useState<string[]>([]);
@@ -286,6 +302,9 @@ export function PatchDraftPanel({
               <span className="meta-pill">
                 {isBatchMode ? copy.patch.multiFilePreview : copy.patch.singleFileSafeApply}
               </span>
+              <span className="meta-pill">
+                {actionCopy.fileScope}: {parsedTargetPaths.length || 0}
+              </span>
             </div>
           </div>
 
@@ -336,6 +355,9 @@ export function PatchDraftPanel({
                 : isBatchMode
                   ? copy.patch.generateBatch(parsedTargetPaths.length)
                   : copy.patch.generateSingle}
+            </button>
+            <button className="button-secondary" onClick={onOpenChat} type="button">
+              {actionCopy.askFirst}
             </button>
           </div>
         </form>
@@ -424,6 +446,9 @@ export function PatchDraftPanel({
                   : recommendedCheckCount > 0
                     ? copy.patch.applyAndVerify(recommendedCheckCount)
                     : copy.patch.applyAndVerifyDefault}
+              </button>
+              <button className="button-secondary" onClick={onOpenChecks} type="button">
+                {actionCopy.verifyNow}
               </button>
               <div className="field-help">{copy.patch.applyHelp}</div>
             </div>
@@ -532,6 +557,9 @@ export function PatchDraftPanel({
                 : recommendedCheckCount > 0
                   ? copy.patch.applySelectedAndVerify(recommendedCheckCount)
                   : copy.patch.applySelectedAndVerifyDefault}
+            </button>
+            <button className="button-secondary" onClick={onOpenChecks} type="button">
+              {actionCopy.verifyNow}
             </button>
             <div className="field-help">{copy.patch.batchHelp}</div>
           </div>
