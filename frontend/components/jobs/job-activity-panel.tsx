@@ -13,6 +13,33 @@ type JobActivityPanelProps = {
 
 type JobFilter = "all" | "current" | "failed";
 
+function formatRelativeTime(locale: WorkspaceLocale, value: string): string {
+  const date = new Date(value);
+  const deltaSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["day", 60 * 60 * 24],
+    ["hour", 60 * 60],
+    ["minute", 60],
+  ];
+
+  for (const [unit, secondsPerUnit] of units) {
+    if (Math.abs(deltaSeconds) >= secondsPerUnit || unit === "minute") {
+      return formatter.format(Math.round(deltaSeconds / secondsPerUnit), unit);
+    }
+  }
+
+  return formatter.format(deltaSeconds, "second");
+}
+
+function getStatusClassName(status: JobRun["status"]): string {
+  if (status === "running") return "is-running";
+  if (status === "succeeded") return "is-succeeded";
+  if (status === "failed") return "is-failed";
+  return "is-queued";
+}
+
 function formatJobStatus(locale: WorkspaceLocale, status: JobRun["status"]): string {
   if (locale === "zh-CN") {
     if (status === "queued") return "排队中";
@@ -103,8 +130,18 @@ export function JobActivityPanel({
                     <div className="repo-meta">
                       {repository?.name ?? `${copy.jobs.repositoryPrefix} #${job.repo_id}`}
                     </div>
+                    <div className="job-meta-line">
+                      <span>
+                        {copy.jobs.createdLabel} {formatRelativeTime(locale, job.created_at)}
+                      </span>
+                      <span>
+                        {copy.jobs.updatedLabel} {formatRelativeTime(locale, job.updated_at)}
+                      </span>
+                    </div>
                   </div>
-                  <span className="status-pill">{formatJobStatus(locale, job.status)}</span>
+                  <span className={`status-pill ${getStatusClassName(job.status)}`.trim()}>
+                    {formatJobStatus(locale, job.status)}
+                  </span>
                 </div>
                 <div className="repo-meta">{job.message ?? copy.jobs.noMessage}</div>
                 {job.status === "failed" ? (

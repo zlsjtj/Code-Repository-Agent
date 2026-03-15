@@ -590,6 +590,15 @@ select {
   background: rgba(255, 255, 255, 0.55);
 }
 
+.job-meta-line {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .job-filter-row {
   display: flex;
   gap: 8px;
@@ -660,6 +669,26 @@ select {
 .status-pill.is-muted {
   background: rgba(36, 28, 18, 0.06);
   color: var(--muted);
+}
+
+.status-pill.is-queued {
+  background: rgba(36, 28, 18, 0.08);
+  color: var(--muted);
+}
+
+.status-pill.is-running {
+  background: rgba(38, 74, 98, 0.12);
+  color: #264a62;
+}
+
+.status-pill.is-succeeded {
+  background: rgba(31, 93, 80, 0.1);
+  color: var(--accent);
+}
+
+.status-pill.is-failed {
+  background: rgba(140, 90, 25, 0.12);
+  color: var(--warning);
 }
 
 .inline-code {

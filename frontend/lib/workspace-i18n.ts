@@ -71,6 +71,8 @@ type LocaleCopy = {
     empty: string;
     repositoryPrefix: string;
     noMessage: string;
+    createdLabel: string;
+    updatedLabel: string;
     showAll: string;
     showCurrentRepo: string;
     showFailed: string;
@@ -285,6 +287,8 @@ const zhCN: LocaleCopy = {
     empty: "还没有后台任务记录。",
     repositoryPrefix: "仓库",
     noMessage: "暂无附加说明。",
+    createdLabel: "创建于",
+    updatedLabel: "更新于",
     showAll: "全部",
     showCurrentRepo: "当前仓库",
     showFailed: "仅失败",
@@ -506,6 +510,8 @@ const en: LocaleCopy = {
     empty: "No background jobs yet.",
     repositoryPrefix: "Repository",
     noMessage: "No additional message.",
+    createdLabel: "Created",
+    updatedLabel: "Updated",
     showAll: "All",
     showCurrentRepo: "Current repo",
     showFailed: "Failed only",
