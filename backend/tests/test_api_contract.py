@@ -8,6 +8,7 @@ def test_openapi_exposes_core_agent_contracts(client):
 
     for path in (
         "/api/repositories",
+        "/api/repositories/import-jobs",
         "/api/repositories/{repo_id}/index",
         "/api/tools/search",
         "/api/chat/ask",
@@ -35,3 +36,5 @@ def test_openapi_exposes_core_agent_contracts(client):
     assert "response_language" in tool_search_properties
     assert "response_language" in tool_read_properties
     assert "JobRunRead" in schemas
+    assert "RepositoryImportJobResponse" in schemas
+    assert "repository_clone" in schemas["JobRunRead"]["properties"]["job_type"]["enum"]

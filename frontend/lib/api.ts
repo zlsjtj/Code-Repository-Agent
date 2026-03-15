@@ -22,6 +22,7 @@ import type {
   PatchDraftPayload,
   PatchDraftResponse,
   RepositoryCreatePayload,
+  RepositoryImportJobResponse,
   RepositoryIndexResponse,
   RepositoryListResponse,
   RepositoryRecord,
@@ -82,6 +83,17 @@ export function listRepositories() {
 
 export function createRepository(payload: RepositoryCreatePayload, locale?: WorkspaceLocale) {
   return request<RepositoryRecord>("/api/repositories", {
+    body: JSON.stringify(payload),
+    locale,
+    method: "POST",
+  });
+}
+
+export function createRepositoryImportJob(
+  payload: RepositoryCreatePayload,
+  locale?: WorkspaceLocale,
+) {
+  return request<RepositoryImportJobResponse>("/api/repositories/import-jobs", {
     body: JSON.stringify(payload),
     locale,
     method: "POST",

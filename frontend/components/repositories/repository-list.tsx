@@ -9,6 +9,7 @@ import {
 type RepositoryListProps = {
   repositories: RepositoryRecord[];
   isLoading: boolean;
+  importingRepoId: number | null;
   indexingRepoId: number | null;
   selectedRepoId: number | null;
   locale: WorkspaceLocale;
@@ -19,6 +20,7 @@ type RepositoryListProps = {
 export function RepositoryList({
   repositories,
   isLoading,
+  importingRepoId,
   indexingRepoId,
   locale,
   selectedRepoId,
@@ -76,13 +78,17 @@ export function RepositoryList({
                 </button>
                 <button
                   className="button-secondary"
-                  disabled={!repository.root_path || indexingRepoId === repository.id}
+                  disabled={
+                    !repository.root_path ||
+                    importingRepoId === repository.id ||
+                    indexingRepoId === repository.id
+                  }
                   onClick={() => onIndex(repository.id)}
                   type="button"
                 >
                   {!repository.root_path
                     ? copy.repositoryList.missingWorkspace
-                    : indexingRepoId === repository.id
+                    : importingRepoId === repository.id || indexingRepoId === repository.id
                       ? copy.repositoryList.indexing
                       : copy.repositoryList.triggerIndex}
                 </button>

@@ -3,9 +3,10 @@
 import { startTransition, useEffect, useState } from "react";
 
 import {
+  createRepositoryImportJob,
   createRepositoryIndexJob,
-  fetchJob,
   createRepository,
+  fetchJob,
   fetchHealth,
   fetchMeta,
   listRepositories,
@@ -38,7 +39,9 @@ export function useWorkspaceRepositories({
   const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [importingRepoId, setImportingRepoId] = useState<number | null>(null);
   const [indexingRepoId, setIndexingRepoId] = useState<number | null>(null);
+  const [activeImportJob, setActiveImportJob] = useState<JobRun | null>(null);
   const [activeIndexJob, setActiveIndexJob] = useState<JobRun | null>(null);
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
 
@@ -106,6 +109,7 @@ export function useWorkspaceRepositories({
     startTransition(() => {
       setRepositories(repositoriesResponse.items);
     });
+    return repositoriesResponse.items;
   }
 
   async function handleRepositorySubmit(payload: RepositoryCreatePayload) {
@@ -114,18 +118,81 @@ export function useWorkspaceRepositories({
     setStatusMessage(null);
 
     try {
-      const created = await createRepository(payload, locale);
-      startTransition(() => {
-        setRepositories((current) => [created, ...current]);
-      });
-      setSelectedRepoId(created.id);
-      setStatusMessage(copy.feedback.repositoryRegistered(created.name));
+      if (payload.source_type === "github") {
+        const importResponse = await createRepositoryImportJob(payload, locale);
+        startTransition(() => {
+          setRepositories((current) => [importResponse.repository, ...current]);
+        });
+        setSelectedRepoId(importResponse.repository.id);
+        setImportingRepoId(importResponse.repository.id);
+        setActiveImportJob(importResponse.job);
+        setStatusMessage(importResponse.job.message ?? copy.feedback.registerRepository);
+      } else {
+        const created = await createRepository(payload, locale);
+        startTransition(() => {
+          setRepositories((current) => [created, ...current]);
+        });
+        setSelectedRepoId(created.id);
+        setStatusMessage(copy.feedback.repositoryRegistered(created.name));
+      }
     } catch (submitError) {
       setError(toErrorMessage(submitError, copy.feedback.registerRepository));
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  useEffect(() => {
+    if (!activeImportJob || !importingRepoId) {
+      return;
+    }
+    if (activeImportJob.status === "succeeded" || activeImportJob.status === "failed") {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const nextJob = await fetchJob(activeImportJob.id, locale);
+        if (cancelled) {
+          return;
+        }
+        setActiveImportJob(nextJob);
+
+        if (nextJob.status === "succeeded") {
+          await refreshRepositories();
+          setStatusMessage(nextJob.message ?? copy.feedback.repositoryRegistered("GitHub"));
+          setImportingRepoId(null);
+          setActiveImportJob(null);
+        } else if (nextJob.status === "failed") {
+          await refreshRepositories();
+          setError(nextJob.message ?? copy.feedback.registerRepository);
+          setImportingRepoId(null);
+          setActiveImportJob(null);
+        }
+      } catch (jobError) {
+        if (cancelled) {
+          return;
+        }
+        setError(toErrorMessage(jobError, copy.feedback.registerRepository));
+        setImportingRepoId(null);
+        setActiveImportJob(null);
+      }
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeImportJob,
+    copy.feedback.registerRepository,
+    importingRepoId,
+    locale,
+    refreshRepositories,
+    setError,
+    setStatusMessage,
+  ]);
 
   useEffect(() => {
     if (!activeIndexJob || !indexingRepoId) {
@@ -212,6 +279,7 @@ export function useWorkspaceRepositories({
     selectedRepository,
     isLoading,
     isSubmitting,
+    importingRepoId,
     indexingRepoId,
     setSelectedRepoId,
     handleRepositorySubmit,

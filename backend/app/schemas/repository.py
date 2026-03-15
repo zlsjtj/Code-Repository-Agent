@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from app.schemas.jobs import JobRunRead
 
 RepositorySourceType = Literal["local", "github"]
 RepositoryStatus = Literal["pending", "ready", "indexing", "failed"]
@@ -42,6 +43,11 @@ class RepositoryRead(BaseModel):
 
 class RepositoryListResponse(BaseModel):
     items: list[RepositoryRead]
+
+
+class RepositoryImportJobResponse(BaseModel):
+    repository: RepositoryRead
+    job: JobRunRead
 
 
 class RepositoryIndexResponse(BaseModel):

@@ -1,4 +1,5 @@
 from app.services.job_service import JobService
+from app.services.repository_service import RepositoryService
 
 
 def test_create_index_job_and_query_status(client, tmp_path, monkeypatch):
@@ -32,3 +33,44 @@ def test_create_index_job_and_query_status(client, tmp_path, monkeypatch):
     assert fetched["status"] == "succeeded"
     assert fetched["file_count"] == 1
     assert fetched["chunk_count"] >= 1
+
+
+def test_create_github_import_job_and_query_status(client, monkeypatch):
+    def run_clone_inline(self, job_id, response_language):
+        self._run_repository_clone_job(job_id, response_language)
+
+    def fake_clone(self, *, source_url, target_dir, default_branch, response_language=None):
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / "README.md").write_text("# cloned\n", encoding="utf-8")
+        return default_branch or "main"
+
+    monkeypatch.setattr(JobService, "_submit_clone_job", run_clone_inline)
+    monkeypatch.setattr(RepositoryService, "_clone_github_repository", fake_clone)
+
+    response = client.post(
+        "/api/repositories/import-jobs",
+        json={
+            "source_type": "github",
+            "source_url": "https://github.com/example/async-demo-repo",
+            "default_branch": "main",
+        },
+        headers={"X-Response-Language": "zh-CN"},
+    )
+    assert response.status_code == 202
+
+    payload = response.json()
+    assert payload["repository"]["name"] == "async-demo-repo"
+    assert payload["repository"]["root_path"] is None
+    assert payload["job"]["job_type"] == "repository_clone"
+    assert payload["job"]["status"] == "queued"
+
+    job_response = client.get(f"/api/jobs/{payload['job']['id']}")
+    assert job_response.status_code == 200
+    assert job_response.json()["status"] == "succeeded"
+
+    repo_response = client.get(f"/api/repositories/{payload['repository']['id']}")
+    assert repo_response.status_code == 200
+    repo_payload = repo_response.json()
+    assert repo_payload["root_path"]
+    assert repo_payload["default_branch"] == "main"
+    assert repo_payload["status"] == "pending"

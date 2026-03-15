@@ -15,6 +15,7 @@ export type MetaResponse = ApiSchema<"MetaResponse">;
 
 export type RepositoryRecord = ApiSchema<"RepositoryRead">;
 export type RepositoryListResponse = ApiSchema<"RepositoryListResponse">;
+export type RepositoryImportJobResponse = ApiSchema<"RepositoryImportJobResponse">;
 export type RepositoryIndexResponse = ApiSchema<"RepositoryIndexResponse">;
 export type RepositoryIndexStatusResponse = ApiSchema<"RepositoryIndexStatusResponse">;
 export type RepositoryTreeNode = ApiSchema<"RepositoryTreeNode">;

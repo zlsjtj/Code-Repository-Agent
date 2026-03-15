@@ -187,6 +187,45 @@ class RepositoryService:
             raise
         return repository
 
+    def create_pending_github_repository(
+        self,
+        payload: RepositoryCreate,
+        response_language: ResponseLanguage | None = None,
+    ) -> Repository:
+        if payload.source_type != "github":
+            raise RepositoryValidationError(
+                self._localized_message(
+                    response_language,
+                    "鍙湁 GitHub 浠撳簱鏀寔鍚庡彴鍏嬮殕浠诲姟銆?",
+                    "Only GitHub repositories support background clone jobs.",
+                )
+            )
+
+        source_url = self._normalize_github_source_url(
+            str(payload.source_url) if payload.source_url else None,
+            response_language,
+        )
+        derived_name = self._derive_repository_name(source_url)
+        repository = Repository(
+            name=payload.name.strip() if payload.name else derived_name,
+            source_type=payload.source_type,
+            source_url=source_url,
+            root_path=None,
+            default_branch=payload.default_branch,
+            primary_language=None,
+            status="pending",
+        )
+        self.db.add(repository)
+        self.db.commit()
+        self.db.refresh(repository)
+        logger.info(
+            "repository.create_pending.success repo_id=%s source_type=%s source_url=%s",
+            repository.id,
+            repository.source_type,
+            repository.source_url,
+        )
+        return repository
+
     def _derive_repository_name(self, source_url: str | None) -> str:
         if not source_url:
             return "github-repository"

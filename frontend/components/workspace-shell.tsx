@@ -187,6 +187,7 @@ export function WorkspaceShell() {
 
           <RepositoryImportForm isSubmitting={repositoriesWorkspace.isSubmitting} locale={locale} onSubmit={repositoriesWorkspace.handleRepositorySubmit} />
           <RepositoryList
+            importingRepoId={repositoriesWorkspace.importingRepoId}
             indexingRepoId={repositoriesWorkspace.indexingRepoId}
             isLoading={repositoriesWorkspace.isLoading}
             locale={locale}

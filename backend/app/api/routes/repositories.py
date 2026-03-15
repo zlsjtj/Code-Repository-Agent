@@ -8,6 +8,7 @@ from app.schemas.jobs import JobRunRead
 from app.schemas.repository import (
     FileChunkListResponse,
     RepositoryCreate,
+    RepositoryImportJobResponse,
     RepositoryIndexResponse,
     RepositoryIndexStatusResponse,
     RepositoryListResponse,
@@ -16,7 +17,7 @@ from app.schemas.repository import (
 )
 from app.services.indexing_service import IndexingService
 from app.services.job_service import JobService
-from app.services.repository_service import RepositoryService
+from app.services.repository_service import RepositoryService, RepositoryValidationError
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -36,6 +37,23 @@ def create_repository(
 ) -> RepositoryRead:
     service = RepositoryService(db)
     return service.create_repository(payload, response_language)
+
+
+@router.post("/import-jobs", response_model=RepositoryImportJobResponse, status_code=status.HTTP_202_ACCEPTED)
+def create_repository_import_job(
+    payload: RepositoryCreate,
+    db: Session = Depends(get_db),
+    response_language: ResponseLanguage | None = Depends(get_response_language),
+) -> RepositoryImportJobResponse:
+    if payload.source_type != "github":
+        raise RepositoryValidationError(
+            "鍙湁 GitHub 浠撳簱鍙互浣跨敤鍚庡彴瀵煎叆浠诲姟鎺ュ彛銆?"
+            if response_language == ResponseLanguage.ZH_CN
+            else "Only GitHub repositories can use the background import job endpoint."
+        )
+
+    service = JobService(db)
+    return service.enqueue_repository_clone_job(payload, response_language)
 
 
 @router.get("/{repo_id}", response_model=RepositoryRead)

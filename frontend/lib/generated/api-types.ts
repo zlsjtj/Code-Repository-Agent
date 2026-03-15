@@ -51,6 +51,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/repositories/import-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Repository Import Job */
+        post: operations["create_repository_import_job_api_repositories_import_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/repositories/{repo_id}": {
         parameters: {
             query?: never;
@@ -674,9 +691,9 @@ export interface components {
             repo_id: number;
             /**
              * Job Type
-             * @constant
+             * @enum {string}
              */
-            job_type: "repository_index";
+            job_type: "repository_index" | "repository_clone";
             /**
              * Status
              * @enum {string}
@@ -984,6 +1001,11 @@ export interface components {
             /** Default Branch */
             default_branch?: string | null;
         };
+        /** RepositoryImportJobResponse */
+        RepositoryImportJobResponse: {
+            repository: components["schemas"]["RepositoryRead"];
+            job: components["schemas"]["JobRunRead"];
+        };
         /** RepositoryIndexResponse */
         RepositoryIndexResponse: {
             /** Repo Id */
@@ -1272,6 +1294,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepositoryRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_repository_import_job_api_repositories_import_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Response-Language"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepositoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryImportJobResponse"];
                 };
             };
             /** @description Validation Error */
