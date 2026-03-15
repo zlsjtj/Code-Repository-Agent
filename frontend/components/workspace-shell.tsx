@@ -13,9 +13,19 @@ import { useChatWorkspace } from "@/lib/hooks/use-chat-workspace";
 import { usePatchChecksWorkspace } from "@/lib/hooks/use-patch-checks-workspace";
 import { useWorkspaceRepositories } from "@/lib/hooks/use-workspace-repositories";
 
+type WorkspaceView = "chat" | "patch" | "checks";
+
+type WorkspaceTab = {
+  id: WorkspaceView;
+  label: string;
+  hint: string;
+  count?: number;
+};
+
 export function WorkspaceShell() {
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<WorkspaceView>("chat");
 
   const repositoriesWorkspace = useWorkspaceRepositories({
     setError,
@@ -36,45 +46,111 @@ export function WorkspaceShell() {
     setStatusMessage,
   });
 
+  const selectedRepository = repositoriesWorkspace.selectedRepository;
+  const citationCount = chatWorkspace.chatResponse?.citations.length ?? 0;
+  const checkCount = patchChecksWorkspace.checkProfiles.length;
+  const hasChatHistory = chatWorkspace.chatHistory.length > 0;
+  const hasChatResponse = Boolean(chatWorkspace.chatResponse);
+
+  const tabs: WorkspaceTab[] = [
+    {
+      id: "chat",
+      label: "Chat",
+      hint: "Ask grounded questions and inspect citations.",
+      count: hasChatResponse ? citationCount : undefined,
+    },
+    {
+      id: "patch",
+      label: "Patch",
+      hint: "Draft changes first, then review the diff.",
+      count: patchChecksWorkspace.patchBatchResponse?.changed_file_count,
+    },
+    {
+      id: "checks",
+      label: "Checks",
+      hint: "Run safe lint and test commands.",
+      count: checkCount > 0 ? checkCount : undefined,
+    },
+  ];
+
+  const activeTab = tabs.find((tab) => tab.id === activeView) ?? tabs[0];
+
   return (
-    <main className="page-shell">
-      <section className="hero-card">
-        <p className="eyebrow">Stage 13 GitHub Clone Import</p>
-        <h1 className="hero-title">代码库问答与改动助手</h1>
-        <p className="hero-copy">
-          当前阶段已经把 GitHub 仓库从“只登记元信息”推进到了“clone 后直接进入完整工作流”：
-          现在无论仓库来自本地路径还是 GitHub，只要拿到可用工作区，就能继续索引、问答、patch 和 checks。
-        </p>
-        <div className="hero-badges">
-          {repositoriesWorkspace.meta?.features?.map((feature) => (
-            <span className="signal-pill" key={feature}>
-              {feature}
-            </span>
-          )) ?? null}
+    <main className="page-shell page-shell--workspace">
+      <section className="workspace-topbar">
+        <div className="workspace-title-block">
+          <p className="eyebrow">Repository Workspace</p>
+          <h1 className="workspace-title">Code Repository Agent</h1>
+          <p className="workspace-subtitle">
+            Import a repository, ask evidence-based questions, draft a patch, and run safe
+            verification without leaving the same workspace.
+          </p>
         </div>
-        <div className="hero-grid">
-          <div className="hero-stat">
-            <div className="hero-stat-label">Backend</div>
-            <div className="hero-stat-value">
+        <div className="workspace-overview">
+          <article className="workspace-metric">
+            <div className="workspace-metric-label">Backend</div>
+            <div className="workspace-metric-value">
               {repositoriesWorkspace.health?.status === "ok" ? "Healthy" : "Waiting"}
             </div>
-          </div>
-          <div className="hero-stat">
-            <div className="hero-stat-label">Ready Repos</div>
-            <div className="hero-stat-value">{repositoriesWorkspace.readyRepositories.length}</div>
-          </div>
-          <div className="hero-stat">
-            <div className="hero-stat-label">Cited Sessions</div>
-            <div className="hero-stat-value">{chatWorkspace.citedSessionCount}</div>
-          </div>
+          </article>
+          <article className="workspace-metric">
+            <div className="workspace-metric-label">Ready repos</div>
+            <div className="workspace-metric-value">{repositoriesWorkspace.readyRepositories.length}</div>
+          </article>
+          <article className="workspace-metric">
+            <div className="workspace-metric-label">Recent sessions</div>
+            <div className="workspace-metric-value">{chatWorkspace.chatHistory.length}</div>
+          </article>
         </div>
       </section>
 
       {error ? <div className="error-banner">{error}</div> : null}
       {statusMessage ? <div className="success-banner">{statusMessage}</div> : null}
 
-      <section className="workspace-grid">
-        <div className="panel-stack">
+      <section className="workspace-layout">
+        <aside className="workspace-sidebar">
+          <section className="panel-card context-card">
+            <div className="context-card-header">
+              <div>
+                <p className="context-eyebrow">Current repository</p>
+                <h2 className="context-title">
+                  {selectedRepository?.name ?? "No repository selected"}
+                </h2>
+              </div>
+              <span className={`status-pill ${selectedRepository ? "" : "is-muted"}`.trim()}>
+                {selectedRepository?.status ?? "idle"}
+              </span>
+            </div>
+            <p className="context-path">
+              {selectedRepository?.root_path ??
+                selectedRepository?.source_url ??
+                "Select a repository from the list or import a new one to get started."}
+            </p>
+            <div className="context-meta-grid">
+              <div className="context-meta-card">
+                <div className="context-meta-label">Language</div>
+                <div className="context-meta-value">
+                  {selectedRepository?.primary_language ?? "Unknown"}
+                </div>
+              </div>
+              <div className="context-meta-card">
+                <div className="context-meta-label">Source</div>
+                <div className="context-meta-value">
+                  {selectedRepository?.source_type ?? "Not selected"}
+                </div>
+              </div>
+            </div>
+            {repositoriesWorkspace.meta?.features?.length ? (
+              <div className="hero-badges compact-badges">
+                {repositoriesWorkspace.meta.features.map((feature) => (
+                  <span className="signal-pill" key={feature}>
+                    {feature}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </section>
+
           <RepositoryImportForm
             isSubmitting={repositoriesWorkspace.isSubmitting}
             onSubmit={repositoriesWorkspace.handleRepositorySubmit}
@@ -87,112 +163,100 @@ export function WorkspaceShell() {
             repositories={repositoriesWorkspace.repositories}
             selectedRepoId={repositoriesWorkspace.selectedRepoId}
           />
-          <ChatHistoryPanel
-            activeSessionId={chatWorkspace.chatResponse?.session_id ?? null}
-            entries={chatWorkspace.chatHistory}
-            onSelectSession={chatWorkspace.handleSelectHistory}
-          />
-        </div>
-        <div className="panel-stack">
-          <section className="panel-card">
-            <h2 className="panel-title">工作台状态</h2>
-            <p className="panel-copy">
-              前端会在加载时探测后端状态，并把当前聚焦仓库、能力开关和版本信息放到同一层视图里，减少来回确认的成本。
-            </p>
-            <div className="summary-grid">
-              <div className="summary-card">
-                <div className="summary-label">应用名称</div>
-                <div className="summary-value">
-                  {repositoriesWorkspace.meta?.app_name ?? "Loading..."}
-                </div>
+          {hasChatHistory ? (
+            <ChatHistoryPanel
+              activeSessionId={chatWorkspace.chatResponse?.session_id ?? null}
+              entries={chatWorkspace.chatHistory}
+              onSelectSession={chatWorkspace.handleSelectHistory}
+            />
+          ) : null}
+        </aside>
+
+        <section className="workspace-main">
+          <section className="panel-card stage-frame">
+            <div className="stage-frame-header">
+              <div className="stage-frame-copyblock">
+                <p className="context-eyebrow">Active stage</p>
+                <h2 className="stage-frame-title">{activeTab.label}</h2>
+                <p className="stage-frame-copy">{activeTab.hint}</p>
               </div>
-              <div className="summary-card">
-                <div className="summary-label">版本</div>
-                <div className="summary-value">
-                  {repositoriesWorkspace.meta?.version ?? "Loading..."}
-                </div>
-              </div>
-              <div className="summary-card">
-                <div className="summary-label">当前仓库</div>
-                <div className="summary-value">
-                  {repositoriesWorkspace.selectedRepository?.name ?? "尚未选择"}
-                </div>
-              </div>
-              <div className="summary-card">
-                <div className="summary-label">最近会话</div>
-                <div className="summary-value">{chatWorkspace.chatHistory.length}</div>
-              </div>
-            </div>
-            <div className="focus-card workspace-focus-card">
-              <div className="focus-card-label">仓库上下文</div>
-              <div className="focus-card-title">
-                {repositoriesWorkspace.selectedRepository?.name ?? "等待选择仓库"}
-              </div>
-              <div className="focus-card-copy">
-                {repositoriesWorkspace.selectedRepository
-                  ? repositoriesWorkspace.selectedRepository.root_path ??
-                    repositoriesWorkspace.selectedRepository.source_url ??
-                    "无可展示路径"
-                  : "先从左侧仓库列表里选择一个上下文，或者登记新的仓库。"}
-              </div>
-              <div className="meta-pill-row">
-                <span className="meta-pill">
-                  {repositoriesWorkspace.selectedRepository?.primary_language ?? "language unknown"}
-                </span>
-                <span className="meta-pill">
-                  {repositoriesWorkspace.selectedRepository?.status ?? "not-selected"}
-                </span>
-                <span className="meta-pill inline-code">
-                  {repositoriesWorkspace.meta?.features?.join(" / ") ?? "Loading..."}
-                </span>
+              <div className="view-tabs" role="tablist" aria-label="Workspace stages">
+                {tabs.map((tab) => (
+                  <button
+                    aria-selected={tab.id === activeView}
+                    className={`view-tab ${tab.id === activeView ? "is-active" : ""}`.trim()}
+                    key={tab.id}
+                    onClick={() => setActiveView(tab.id)}
+                    role="tab"
+                    type="button"
+                  >
+                    <span>{tab.label}</span>
+                    {tab.count ? <span className="view-tab-badge">{tab.count}</span> : null}
+                  </button>
+                ))}
               </div>
             </div>
           </section>
 
-          <ChatPanel
-            historyCount={chatWorkspace.chatHistory.length}
-            isAsking={chatWorkspace.isAsking}
-            onAsk={chatWorkspace.handleAsk}
-            onSelectRepo={repositoriesWorkspace.setSelectedRepoId}
-            repositories={repositoriesWorkspace.repositories}
-            response={chatWorkspace.chatResponse}
-            selectedRepoId={repositoriesWorkspace.selectedRepoId}
-          />
+          {activeView === "chat" ? (
+            <div
+              className={`workspace-stage-grid ${hasChatResponse ? "" : "is-single"}`.trim()}
+            >
+              <div className="workspace-stage-primary">
+                <ChatPanel
+                  historyCount={chatWorkspace.chatHistory.length}
+                  isAsking={chatWorkspace.isAsking}
+                  onAsk={chatWorkspace.handleAsk}
+                  onSelectRepo={repositoriesWorkspace.setSelectedRepoId}
+                  repositories={repositoriesWorkspace.repositories}
+                  response={chatWorkspace.chatResponse}
+                  selectedRepoId={repositoriesWorkspace.selectedRepoId}
+                />
+              </div>
+              {hasChatResponse ? (
+                <div className="workspace-stage-secondary">
+                  <CitationPanel response={chatWorkspace.chatResponse} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
-          <PatchDraftPanel
-            applyResponse={patchChecksWorkspace.patchApplyResponse}
-            batchApplyResponse={patchChecksWorkspace.patchBatchApplyResponse}
-            batchResponse={patchChecksWorkspace.patchBatchResponse}
-            isApplying={patchChecksWorkspace.isApplyingPatch}
-            isApplyingBatch={patchChecksWorkspace.isApplyingBatchPatch}
-            isApplyingBatchAndChecking={patchChecksWorkspace.isApplyingBatchAndChecking}
-            isApplyingAndChecking={patchChecksWorkspace.isApplyingAndChecking}
-            isDrafting={patchChecksWorkspace.isDraftingPatch}
-            recommendedCheckCount={patchChecksWorkspace.recommendedCheckCount}
-            onApply={patchChecksWorkspace.handleApplyPatch}
-            onApplyBatch={patchChecksWorkspace.handleApplyPatchBatch}
-            onApplyBatchAndCheck={patchChecksWorkspace.handleApplyPatchBatchAndRunChecks}
-            onApplyAndCheck={patchChecksWorkspace.handleApplyPatchAndRunChecks}
-            onDraft={patchChecksWorkspace.handleDraftPatch}
-            response={patchChecksWorkspace.patchResponse}
-            selectedRepository={repositoriesWorkspace.selectedRepository}
-            suggestedPath={chatWorkspace.suggestedPatchPath}
-          />
+          {activeView === "patch" ? (
+            <PatchDraftPanel
+              applyResponse={patchChecksWorkspace.patchApplyResponse}
+              batchApplyResponse={patchChecksWorkspace.patchBatchApplyResponse}
+              batchResponse={patchChecksWorkspace.patchBatchResponse}
+              isApplying={patchChecksWorkspace.isApplyingPatch}
+              isApplyingBatch={patchChecksWorkspace.isApplyingBatchPatch}
+              isApplyingBatchAndChecking={patchChecksWorkspace.isApplyingBatchAndChecking}
+              isApplyingAndChecking={patchChecksWorkspace.isApplyingAndChecking}
+              isDrafting={patchChecksWorkspace.isDraftingPatch}
+              recommendedCheckCount={patchChecksWorkspace.recommendedCheckCount}
+              onApply={patchChecksWorkspace.handleApplyPatch}
+              onApplyBatch={patchChecksWorkspace.handleApplyPatchBatch}
+              onApplyBatchAndCheck={patchChecksWorkspace.handleApplyPatchBatchAndRunChecks}
+              onApplyAndCheck={patchChecksWorkspace.handleApplyPatchAndRunChecks}
+              onDraft={patchChecksWorkspace.handleDraftPatch}
+              response={patchChecksWorkspace.patchResponse}
+              selectedRepository={selectedRepository}
+              suggestedPath={chatWorkspace.suggestedPatchPath}
+            />
+          ) : null}
 
-          <ChecksPanel
-            isLoadingProfiles={patchChecksWorkspace.isLoadingCheckProfiles}
-            isLoadingRecommendation={patchChecksWorkspace.isLoadingCheckRecommendation}
-            isRunningChecks={patchChecksWorkspace.isRunningChecks}
-            onRunChecks={patchChecksWorkspace.handleRunChecks}
-            patchApplyResponse={patchChecksWorkspace.patchApplyResponse}
-            profiles={patchChecksWorkspace.checkProfiles}
-            recommendation={patchChecksWorkspace.checkRecommendation}
-            response={patchChecksWorkspace.checkResponse}
-            selectedRepository={repositoriesWorkspace.selectedRepository}
-          />
-
-          <CitationPanel response={chatWorkspace.chatResponse} />
-        </div>
+          {activeView === "checks" ? (
+            <ChecksPanel
+              isLoadingProfiles={patchChecksWorkspace.isLoadingCheckProfiles}
+              isLoadingRecommendation={patchChecksWorkspace.isLoadingCheckRecommendation}
+              isRunningChecks={patchChecksWorkspace.isRunningChecks}
+              onRunChecks={patchChecksWorkspace.handleRunChecks}
+              patchApplyResponse={patchChecksWorkspace.patchApplyResponse}
+              profiles={patchChecksWorkspace.checkProfiles}
+              recommendation={patchChecksWorkspace.checkRecommendation}
+              response={patchChecksWorkspace.checkResponse}
+              selectedRepository={selectedRepository}
+            />
+          ) : null}
+        </section>
       </section>
     </main>
   );
