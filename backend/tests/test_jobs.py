@@ -75,3 +75,54 @@ def test_create_github_import_job_and_query_status(client, monkeypatch):
     assert repo_payload["root_path"]
     assert repo_payload["default_branch"] == "main"
     assert repo_payload["status"] == "pending"
+
+
+def test_retry_failed_index_job(client, tmp_path, monkeypatch):
+    repository_dir = tmp_path / "retry-job-repo"
+    repository_dir.mkdir()
+    (repository_dir / "main.py").write_text("print('hello')\n", encoding="utf-8")
+
+    create_response = client.post(
+        "/api/repositories",
+        json={"source_type": "local", "root_path": str(repository_dir)},
+    )
+    repo_id = create_response.json()["id"]
+
+    from app.schemas.repository import RepositoryIndexResponse
+    from app.services.indexing_service import IndexingService
+
+    calls = {"count": 0}
+
+    def run_index_inline(self, job_id, response_language):
+        self._run_repository_index_job(job_id, response_language)
+
+    def flaky_index(self, repository, response_language=None):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("boom")
+        repository.status = "ready"
+        return RepositoryIndexResponse(
+            repo_id=repository.id,
+            status="ready",
+            message="Indexed after retry.",
+            file_count=1,
+            chunk_count=1,
+            skipped_file_count=0,
+        )
+
+    monkeypatch.setattr(JobService, "_submit_job", run_index_inline)
+    monkeypatch.setattr(IndexingService, "request_index", flaky_index)
+
+    first_job = client.post(f"/api/repositories/{repo_id}/index-jobs")
+    assert first_job.status_code == 202
+    first_payload = client.get(f"/api/jobs/{first_job.json()['id']}").json()
+    assert first_payload["status"] == "failed"
+
+    retry_response = client.post(f"/api/jobs/{first_job.json()['id']}/retry")
+    assert retry_response.status_code == 200
+    retry_payload = retry_response.json()
+    assert retry_payload["job_type"] == "repository_index"
+    assert retry_payload["status"] == "queued"
+
+    fetched_retry = client.get(f"/api/jobs/{retry_payload['id']}").json()
+    assert fetched_retry["status"] == "succeeded"

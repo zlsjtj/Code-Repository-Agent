@@ -5,6 +5,8 @@ type JobActivityPanelProps = {
   jobs: JobRun[];
   repositories: RepositoryRecord[];
   locale: WorkspaceLocale;
+  retryingJobId: number | null;
+  onRetry: (jobId: number) => Promise<void> | void;
 };
 
 function formatJobStatus(locale: WorkspaceLocale, status: JobRun["status"]): string {
@@ -31,6 +33,8 @@ export function JobActivityPanel({
   jobs,
   repositories,
   locale,
+  retryingJobId,
+  onRetry,
 }: JobActivityPanelProps) {
   const copy = getWorkspaceCopy(locale);
 
@@ -58,6 +62,18 @@ export function JobActivityPanel({
                   <span className="status-pill">{formatJobStatus(locale, job.status)}</span>
                 </div>
                 <div className="repo-meta">{job.message ?? copy.jobs.noMessage}</div>
+                {job.status === "failed" ? (
+                  <div className="button-row top-gap">
+                    <button
+                      className="button-secondary"
+                      disabled={retryingJobId === job.id}
+                      onClick={() => onRetry(job.id)}
+                      type="button"
+                    >
+                      {retryingJobId === job.id ? copy.jobs.retrying : copy.jobs.retry}
+                    </button>
+                  </div>
+                ) : null}
               </article>
             );
           })}

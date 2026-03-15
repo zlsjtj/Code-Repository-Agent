@@ -200,7 +200,9 @@ export function WorkspaceShell() {
           <JobActivityPanel
             jobs={repositoriesWorkspace.recentJobs}
             locale={locale}
+            onRetry={repositoriesWorkspace.handleRetryJob}
             repositories={repositoriesWorkspace.repositories}
+            retryingJobId={repositoriesWorkspace.retryingJobId}
           />
           {hasChatHistory ? (
             <ChatHistoryPanel

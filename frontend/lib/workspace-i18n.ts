@@ -71,6 +71,9 @@ type LocaleCopy = {
     empty: string;
     repositoryPrefix: string;
     noMessage: string;
+    retry: string;
+    retrying: string;
+    retryQueued: string;
   };
   chatHistory: {
     title: string;
@@ -277,6 +280,9 @@ const zhCN: LocaleCopy = {
     empty: "还没有后台任务记录。",
     repositoryPrefix: "仓库",
     noMessage: "暂无附加说明。",
+    retry: "重试",
+    retrying: "重试中...",
+    retryQueued: "已加入重试队列。",
   },
   chatHistory: {
     title: "最近会话",
@@ -490,6 +496,9 @@ const en: LocaleCopy = {
     empty: "No background jobs yet.",
     repositoryPrefix: "Repository",
     noMessage: "No additional message.",
+    retry: "Retry",
+    retrying: "Retrying...",
+    retryQueued: "Retry job queued.",
   },
   chatHistory: {
     title: "Recent sessions",

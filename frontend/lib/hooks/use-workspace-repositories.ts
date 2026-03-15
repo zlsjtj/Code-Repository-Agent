@@ -11,6 +11,7 @@ import {
   fetchMeta,
   listJobs,
   listRepositories,
+  retryJob,
 } from "@/lib/api";
 import type {
   HealthResponse,
@@ -46,6 +47,7 @@ export function useWorkspaceRepositories({
   const [activeImportJob, setActiveImportJob] = useState<JobRun | null>(null);
   const [activeIndexJob, setActiveIndexJob] = useState<JobRun | null>(null);
   const [recentJobs, setRecentJobs] = useState<JobRun[]>([]);
+  const [retryingJobId, setRetryingJobId] = useState<number | null>(null);
   const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -117,8 +119,8 @@ export function useWorkspaceRepositories({
     return repositoriesResponse.items;
   }
 
-  async function refreshRecentJobs(repoId?: number | null) {
-    const jobsResponse: JobRunListResponse = await listJobs(repoId ?? undefined, locale);
+  async function refreshRecentJobs() {
+    const jobsResponse: JobRunListResponse = await listJobs(undefined, locale);
     startTransition(() => {
       setRecentJobs(jobsResponse.items);
     });
@@ -175,13 +177,13 @@ export function useWorkspaceRepositories({
 
         if (nextJob.status === "succeeded") {
           await refreshRepositories();
-          await refreshRecentJobs(importingRepoId);
+          await refreshRecentJobs();
           setStatusMessage(nextJob.message ?? copy.feedback.repositoryRegistered("GitHub"));
           setImportingRepoId(null);
           setActiveImportJob(null);
         } else if (nextJob.status === "failed") {
           await refreshRepositories();
-          await refreshRecentJobs(importingRepoId);
+          await refreshRecentJobs();
           setError(nextJob.message ?? copy.feedback.registerRepository);
           setImportingRepoId(null);
           setActiveImportJob(null);
@@ -229,12 +231,12 @@ export function useWorkspaceRepositories({
 
         if (nextJob.status === "succeeded") {
           await refreshRepositories();
-          await refreshRecentJobs(indexingRepoId);
+          await refreshRecentJobs();
           setStatusMessage(copy.feedback.indexCompleted(nextJob.file_count, nextJob.chunk_count));
           setIndexingRepoId(null);
           setActiveIndexJob(null);
         } else if (nextJob.status === "failed") {
-          await refreshRecentJobs(indexingRepoId);
+          await refreshRecentJobs();
           setError(nextJob.message ?? copy.feedback.indexRepository);
           setIndexingRepoId(null);
           setActiveIndexJob(null);
@@ -285,6 +287,31 @@ export function useWorkspaceRepositories({
     }
   }
 
+  async function handleRetryJob(jobId: number) {
+    setRetryingJobId(jobId);
+    setError(null);
+
+    try {
+      const job = await retryJob(jobId, locale);
+      startTransition(() => {
+        setRecentJobs((current) => [job, ...current].slice(0, 12));
+      });
+
+      if (job.job_type === "repository_clone") {
+        setImportingRepoId(job.repo_id);
+        setActiveImportJob(job);
+      } else {
+        setIndexingRepoId(job.repo_id);
+        setActiveIndexJob(job);
+      }
+      setStatusMessage(job.message ?? copy.jobs.retryQueued);
+    } catch (retryError) {
+      setError(toErrorMessage(retryError, copy.jobs.retryQueued));
+    } finally {
+      setRetryingJobId(null);
+    }
+  }
+
   const selectedRepository =
     repositories.find((repository) => repository.id === selectedRepoId) ?? null;
   const readyRepositories = repositories.filter(
@@ -303,9 +330,11 @@ export function useWorkspaceRepositories({
     isSubmitting,
     importingRepoId,
     indexingRepoId,
+    retryingJobId,
     setSelectedRepoId,
     handleRepositorySubmit,
     handleIndexRepository,
+    handleRetryJob,
     refreshRepositories,
   };
 }

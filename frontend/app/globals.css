@@ -578,6 +578,18 @@ select {
   gap: 12px;
 }
 
+.job-list {
+  display: grid;
+  gap: 12px;
+}
+
+.job-item {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
 .repo-header {
   display: flex;
   align-items: center;

@@ -131,6 +131,13 @@ export function listJobs(repoId?: number, locale?: WorkspaceLocale) {
   });
 }
 
+export function retryJob(jobId: number, locale?: WorkspaceLocale) {
+  return request<JobRun>(`/api/jobs/${jobId}/retry`, {
+    locale,
+    method: "POST",
+  });
+}
+
 export function askRepositoryQuestion(payload: ChatAskPayload) {
   return request<ChatAskResponse>("/api/chat/ask", {
     body: JSON.stringify(payload),

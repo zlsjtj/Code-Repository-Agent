@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.api.language import get_response_language
 from app.core.db import get_db
+from app.schemas.common import ResponseLanguage
 from app.schemas.jobs import JobRunListResponse, JobRunRead
 from app.services.job_service import JobService
 
@@ -22,3 +24,13 @@ def list_jobs(
 def get_job(job_id: int, db: Session = Depends(get_db)) -> JobRunRead:
     service = JobService(db)
     return service.get_job(job_id)
+
+
+@router.post("/{job_id}/retry", response_model=JobRunRead)
+def retry_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    response_language: ResponseLanguage | None = Depends(get_response_language),
+) -> JobRunRead:
+    service = JobService(db)
+    return service.retry_job(job_id, response_language)

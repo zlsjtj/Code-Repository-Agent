@@ -17,6 +17,7 @@ def test_openapi_exposes_core_agent_contracts(client):
         "/api/repositories/{repo_id}/index-jobs",
         "/api/jobs",
         "/api/jobs/{job_id}",
+        "/api/jobs/{job_id}/retry",
     ):
         assert path in paths
 

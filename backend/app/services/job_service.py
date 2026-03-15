@@ -86,6 +86,44 @@ class JobService:
         jobs = list(self.db.scalars(query).all())
         return JobRunListResponse(items=[JobRunRead.model_validate(job) for job in jobs])
 
+    def retry_job(
+        self,
+        job_id: int,
+        response_language: ResponseLanguage | None = None,
+    ) -> JobRunRead:
+        existing_job = self.db.get(JobRun, job_id)
+        if existing_job is None:
+            raise LookupError(f"Job {job_id} was not found.")
+        if existing_job.status != "failed":
+            raise RepositoryValidationError(
+                self._localized_message(
+                    response_language,
+                    "鍙湁澶辫触鐨勪换鍔℃墠鑳介噸璇曘€?",
+                    "Only failed jobs can be retried.",
+                )
+            )
+
+        repository = self.repository_service.get_repository(existing_job.repo_id, response_language)
+        retry_job = JobRun(
+            repo_id=repository.id,
+            job_type=existing_job.job_type,
+            status="queued",
+            message=self._localized_message(
+                response_language,
+                "宸插垱寤洪噸璇曚换鍔°€?",
+                "Retry job queued.",
+            ),
+        )
+        self.db.add(retry_job)
+        self.db.commit()
+        self.db.refresh(retry_job)
+
+        if retry_job.job_type == "repository_clone":
+            self._submit_clone_job(retry_job.id, response_language)
+        else:
+            self._submit_job(retry_job.id, response_language)
+        return JobRunRead.model_validate(retry_job)
+
     def _submit_job(self, job_id: int, response_language: ResponseLanguage | None) -> None:
         self._executor.submit(self._run_repository_index_job, job_id, response_language)
 
