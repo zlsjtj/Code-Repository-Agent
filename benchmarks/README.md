@@ -1,15 +1,15 @@
 # Benchmarks
 
-This folder stores lightweight evaluation assets for the repository agent.
+这里先放少量手写的问答检查样例，还不是完整评测系统。
 
-Current scope:
+目前只有两件事：
 
-- `smoke_cases.json`: a small hand-written regression set for question answering
-- fixture validation in backend tests to keep the benchmark schema stable
+- `smoke_cases.json`：几条针对本仓库的问答样例。
+- 后端测试会检查这个 JSON 的字段形状，避免样例文件随手改坏。
 
-Suggested workflow:
+如果要扩展，比较实际的做法是：
 
-1. Add a new case when a retrieval or answer regression is found.
-2. Keep the question concrete and repository-specific.
-3. Record the file paths that should appear in citations or tool traces.
-4. Expand this into executable eval scripts once the benchmark set is large enough.
+1. 先把这些样例接成一个脚本，跑完后检查预期引用文件是否出现。
+2. 每次发现检索或回答退化时，再补一条具体 case。
+3. 样例问题尽量和仓库文件绑定，不写泛泛的开放问题。
+4. case 数量多起来以后，再考虑更细的打分方式。

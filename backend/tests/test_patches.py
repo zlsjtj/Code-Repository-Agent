@@ -339,7 +339,7 @@ def test_patch_apply_and_checks_runs_closed_loop(client, tmp_path):
                 "from service import greet",
                 "",
                 "def test_greet_uses_name():",
-                '    assert greet("Codex") == "hello Codex"',
+                '    assert greet("Ada") == "hello Ada"',
             ]
         )
         + "\n",
@@ -398,7 +398,7 @@ def test_patch_batch_apply_and_checks_runs_closed_loop(client, tmp_path):
                 "from service import greet",
                 "",
                 "def test_greet_uses_name():",
-                '    assert greet("Codex") == "hello Codex"',
+                '    assert greet("Ada") == "hello Ada"',
             ]
         )
         + "\n",
