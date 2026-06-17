@@ -1,5 +1,7 @@
 # CodeAtlas
 
+[![CI](https://github.com/zlsjtj/CodeAtlas/actions/workflows/ci.yml/badge.svg)](https://github.com/zlsjtj/CodeAtlas/actions/workflows/ci.yml)
+
 CodeAtlas 是一个面向代码仓库的问答和改动辅助工具。它的目标不大：导入一个仓库后，先做基础索引，再让模型通过受控工具去找文件、读代码、给出带引用的回答；如果需要修改代码，可以先生成草案和 diff，确认后再写入工作区并运行检查。
 
 这个项目目前更接近一个本科阶段的工程实践 MVP，而不是完整产品。重点放在主流程是否跑得通，以及模型参与代码任务时有哪些地方需要约束。
@@ -147,6 +149,8 @@ npm run dev
 更详细的设计记录见 [docs/design-notes.md](docs/design-notes.md)。
 
 ## 测试
+
+仓库里配置了 GitHub Actions，会在 push 和 pull request 时运行后端测试和前端类型检查。
 
 后端测试主要覆盖仓库导入、索引、检索工具、问答接口、patch 应用、批量应用、checks 和失败回滚：
 
