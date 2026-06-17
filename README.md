@@ -1,92 +1,66 @@
-# CodeAtlas 
+# CodeAtlas
 
-一个面向代码仓库的工程化 AI Agent 项目，覆盖代码问答、证据引用、修改草案和基础验证闭环。
+CodeAtlas 是一个面向代码仓库的问答和改动辅助工具。它的目标不大：导入一个仓库后，先做基础索引，再让模型通过受控工具去找文件、读代码、给出带引用的回答；如果需要修改代码，可以先生成草案和 diff，确认后再写入工作区并运行检查。
 
-项目目标很直接：让模型围绕真实仓库完成“找代码、读代码、回答问题、生成改动、运行检查”这条链路，而不是停留在单纯的聊天界面。
+这个项目目前更接近一个本科阶段的工程实践 MVP，而不是完整产品。重点放在主流程是否跑得通，以及模型参与代码任务时有哪些地方需要约束。
 
-## 项目概览
+## 目前能做什么
 
-这个项目主要解决几类开发中很常见的问题：
+- 导入本地仓库，或从 GitHub clone 一个仓库到受管目录。
+- 扫描仓库文件，过滤常见构建产物和二进制文件，把文本文件按行切成 chunk 后写入 SQLite。
+- 提供 `list_repo_tree`、`search_repo`、`read_file`、`find_symbol` 四个仓库检索工具。
+- 问答时要求模型先调用工具，再基于工具结果回答，并返回引用和工具调用摘要。
+- 对单文件或少量文件生成 patch 草案，展示 unified diff。
+- 应用 patch 前校验文件内容哈希，避免覆盖草案生成之后发生变化的文件。
+- 根据仓库结构发现一小部分安全检查命令，例如 `pytest`、`npm run typecheck`、`npm run lint`、`npm run test`。
+- 支持“应用改动并运行检查”，检查失败时把本次写入的文件恢复回去。
 
-- 一个模块到底做什么
-- 关键入口和核心接口在哪
-- 某个问题可能出在哪几层
-- 修改应该先落到哪些文件
-- 改完之后怎么快速验证
+## 暂时没有解决的问题
 
-对应的系统能力是：
-
-- 导入本地仓库或 GitHub 仓库
-- 构建基础代码索引
-- 通过受控工具检索代码、读取文件、定位符号
-- 基于证据回答问题并返回引用
-- 生成 patch 草案和 unified diff 预览
-- 在安全约束下运行 `lint / test`
-
-## 核心能力
-
-- 仓库导入：支持本地目录，也支持将 GitHub 仓库 clone 到受管目录后继续处理。
-- 基础索引：扫描文件树、过滤无关目录和大文件、按行切分代码片段并写入 SQLite。
-- 检索工具：提供 `list_repo_tree`、`search_repo`、`read_file`、`find_symbol`。
-- Agent 问答：通过 OpenAI Agents SDK 调用工具后回答问题，并返回引用和调用摘要。
-- Patch 草案：支持单文件和多文件草案、diff 预览、确认式应用。
-- 验证闭环：支持白名单内的 `pytest`、`npm run typecheck`、`npm run lint`、`npm run test`。
-- 风险控制：通过路径约束、哈希校验、白名单命令和分步确认降低误改风险。
+- 检索还是关键词和行级 chunk，没有接 embedding、rerank 或 AST 级索引。
+- 没有做权限、多用户隔离和完整审计，只适合本地或受信环境使用。
+- 后台任务还是轻量实现，没有引入 Celery、Redis 这类任务系统。
+- Patch 草案依赖模型输出完整文件内容，文件较大时不适合使用。
+- benchmark 目前只是少量手写 smoke cases，还不是自动化评测体系。
+- 前端偏工作台原型，交互能覆盖主流程，但还没有做成成熟 IDE 插件体验。
 
 ## 技术栈
 
 - Backend: `FastAPI`
 - Frontend: `Next.js`
-- Agent Runtime: `OpenAI Agents SDK`
+- Model runtime: `OpenAI Agents SDK`
 - Storage: `SQLite`
 - ORM: `SQLAlchemy`
-- API Contract: `FastAPI OpenAPI -> openapi-typescript -> frontend/lib/generated/api-types.ts`
+- API 类型同步: `FastAPI OpenAPI -> openapi-typescript`
 
-## 系统架构
+## 主流程
 
 ```text
-+---------------------------+
-|       Next.js Frontend    |
-| chat / citations / patch  |
-+------------+--------------+
-             |
-             | HTTP API
-             v
-+---------------------------+
-|      FastAPI Backend      |
-| routes / services / APIs  |
-+------------+--------------+
-             |
-   +---------+---------+--------------------+
-   |                   |                    |
-   v                   v                    v
-+--------+     +---------------+     +--------------+
-| Agent  |     | Tool Runtime  |     | Patch/Checks |
-| Runner |     | tree/search   |     | diff/apply   |
-| OpenAI |     | read/symbol   |     | lint/test    |
-+----+---+     +-------+-------+     +------+-------+
-     |                   |                    |
-     v                   v                    v
-+---------------------------------------------------+
-|                Repository Workspace               |
-| local repo / cloned GitHub repo / scanned files  |
-+----------------------+----------------------------+
-                       |
-                       v
-+---------------------------------------------------+
-| SQLite                                             |
-| Repository / FileChunk / ConversationTrace         |
-+---------------------------------------------------+
+Next.js workspace
+  |
+  | HTTP API
+  v
+FastAPI backend
+  |
+  +-- repository import
+  +-- file scan and chunk index
+  +-- model tools: tree / search / read / symbol
+  +-- patch draft / apply
+  +-- checks discovery / run
+  |
+  v
+SQLite + managed repository workspace
 ```
 
-主链路如下：
+一次典型使用流程：
 
-1. 导入仓库并建立工作区
-2. 扫描文件并生成索引
-3. Agent 通过工具检索上下文
-4. 返回答案、引用和工具调用摘要
-5. 需要改动时生成 patch 草案
-6. 确认后应用 patch 并运行 checks
+1. 导入本地仓库或 GitHub 仓库。
+2. 触发索引。
+3. 在工作台里提问。
+4. 查看回答、引用和工具调用摘要。
+5. 需要修改时生成 patch 草案。
+6. 预览 diff，确认后应用。
+7. 运行推荐检查，失败时回滚本次写入。
 
 ## 目录结构
 
@@ -94,56 +68,49 @@
 .
 ├─ backend/
 │  ├─ app/
-│  │  ├─ api/              # FastAPI 路由
-│  │  ├─ agents/           # Agent 定义与运行上下文
-│  │  ├─ core/             # 配置、数据库初始化
-│  │  ├─ indexing/         # 文件扫描与 chunk 切分
-│  │  ├─ models/           # SQLAlchemy 模型
-│  │  ├─ schemas/          # Pydantic 请求/响应模型
-│  │  ├─ services/         # 仓库、索引、问答、patch、checks
-│  │  ├─ tools/            # 代码检索工具实现
-│  │  └─ main.py
+│  │  ├─ api/          # FastAPI 路由
+│  │  ├─ agents/       # Agents SDK 相关定义
+│  │  ├─ checks/       # 检查项发现和推荐
+│  │  ├─ core/         # 配置、数据库
+│  │  ├─ indexing/     # 文件扫描和 chunk 切分
+│  │  ├─ models/       # SQLAlchemy 模型
+│  │  ├─ schemas/      # Pydantic 请求/响应模型
+│  │  ├─ services/     # 主要业务逻辑
+│  │  └─ tools/        # 给模型调用的仓库工具
 │  ├─ tests/
 │  └─ pyproject.toml
 ├─ frontend/
 │  ├─ app/
 │  ├─ components/
-│  ├─ lib/
-│  └─ package.json
-├─ data/                   # SQLite 数据与运行时文件
-├─ repos/                  # GitHub clone 目录
-├─ benchmarks/             # 预留：评测数据
-├─ docs/                   # 预留：文档与设计材料
-├─ .env.example
-└─ README.md
+│  └─ lib/
+├─ benchmarks/
+├─ docs/
+├─ data/               # 本地运行时数据，默认不提交
+└─ repos/              # clone 下来的仓库，默认不提交
 ```
 
 ## 快速启动
 
-### 环境要求
+环境要求：
 
-- Python 3.12+
+- Python 3.11+
 - Node.js 20+
 - Git
 - OpenAI API Key
 
-### 1. 配置环境变量
+配置环境变量：
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-至少需要配置：
+至少需要设置：
 
-- `OPENAI_API_KEY`
+```text
+OPENAI_API_KEY=...
+```
 
-可选配置：
-
-- `CODE_AGENT_OPENAI_MODEL`
-- `CODE_AGENT_GIT_CLONE_TIMEOUT_SECONDS`
-- `CODE_AGENT_GIT_CLONE_DEPTH`
-
-### 2. 启动后端
+启动后端：
 
 ```powershell
 cd backend
@@ -153,12 +120,7 @@ python -m pip install -e .[dev]
 uvicorn app.main:app --reload --port 8000
 ```
 
-访问：
-
-- Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
-- Health: [http://localhost:8000/api/health](http://localhost:8000/api/health)
-
-### 3. 启动前端
+启动前端：
 
 ```powershell
 cd frontend
@@ -168,102 +130,42 @@ npm run dev
 
 访问：
 
-- Frontend: [http://localhost:3000](http://localhost:3000)
+- Frontend: http://localhost:3000
+- Backend docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/api/health
 
-### 4. 最小使用流程
+## 实现取舍
 
-1. 导入一个本地仓库或 GitHub 仓库
-2. 触发索引
-3. 在前端工作台提问
-4. 查看回答、引用和工具调用摘要
-5. 生成 patch 草案并预览 diff
-6. 应用 patch 并运行 checks
+这个项目里有几处是刻意做得比较简单的：
 
-## 示例问答
+- 索引层先用文件扫描和行级 chunk。这样可以先验证“导入 -> 检索 -> 引用回答”的链路，后面再替换成向量检索或 AST 索引。
+- 仓库统一抽象成 `root_path`。本地目录和 GitHub clone 后续都走同一套索引、问答、patch 和 checks 逻辑。
+- 模型只能通过工具读仓库，不直接把整个仓库塞进 prompt。这样更容易知道它读过哪些证据。
+- Patch 先做草案和 diff，再应用。应用前用 sha256 校验基线内容，避免覆盖用户在草案生成后做出的修改。
+- Checks 只运行发现到的白名单命令，不开放任意命令执行。
 
-问题：
+更详细的设计记录见 [docs/design-notes.md](docs/design-notes.md)。
 
-```text
-这个仓库的索引流程是怎么工作的？关键入口在哪里？
+## 测试
+
+后端测试主要覆盖仓库导入、索引、检索工具、问答接口、patch 应用、批量应用、checks 和失败回滚：
+
+```powershell
+cd backend
+python -m pytest
 ```
 
-Agent 可能执行的工具链：
+前端目前主要依赖 TypeScript 检查：
 
-```text
-1. search_repo(query="indexing")
-2. read_file(path="backend/app/services/indexing_service.py")
-3. read_file(path="backend/app/api/routes/repositories.py")
+```powershell
+cd frontend
+npm run typecheck
 ```
 
-回答示例：
+## 下一步
 
-```text
-索引入口在 POST /api/repositories/{repo_id}/index。
-实际执行逻辑在 IndexingService.request_index：
-
-- 解析仓库工作区根目录
-- 扫描文件并过滤无关目录和二进制文件
-- 按行切分文本文件为 chunk
-- 将 FileChunk 写入 SQLite
-- 更新 Repository 的状态和 primary_language
-```
-
-引用示例：
-
-```text
-- backend/app/api/routes/repositories.py:88
-- backend/app/services/indexing_service.py:17
-```
-
-## 关键实现思路
-
-### 1. 统一仓库工作区抽象
-
-无论仓库来自本地路径还是 GitHub clone，系统最终都映射到一个可访问的 `root_path`。这样索引、问答、patch、checks 都可以复用同一套流程。
-
-### 2. 先做轻量索引，再逐步增强
-
-当前索引基于文件扫描和行级 chunk，而不是一开始就引入向量库。这样实现成本更低，也更适合先验证主链路。后续可以在现有结构上继续接 embedding、rerank 或 AST 分析。
-
-### 3. 通过工具而不是整仓 prompt 访问代码
-
-问答流程不是把整个仓库直接塞给模型，而是通过 `tree/search/read/symbol` 工具按需获取上下文。这样更节省上下文，也更容易追踪模型到底读了哪些证据。
-
-### 4. Patch 采用预览优先的流程
-
-改动能力按“草案 -> diff -> 确认 -> 应用 -> checks”推进。这样更接近实际开发里的 review 过程，也避免模型直接静默修改文件。
-
-### 5. Checks 使用白名单策略
-
-系统只运行识别到的安全命令，不开放任意执行。当前主要覆盖：
-
-- `python -m pytest tests`
-- `npm run typecheck`
-- `npm run lint`
-- `npm run test`
-
-## 风险控制
-
-- 路径约束：文件访问和写入都限制在仓库根目录内。
-- 引用返回：回答包含路径和行号，便于人工复核。
-- Patch 预览：所有改动先出草案和 diff，不直接落盘。
-- 哈希校验：应用 patch 前校验文件基线内容，避免覆盖已变化文件。
-- 检查失败回滚：`apply-and-checks` 会在 checks 失败时恢复已写入文件，避免把失败改动留在工作区。
-- 批量写回保护：多文件 apply 采用先校验、后整体写入，避免半成功状态。
-- 白名单执行：checks 只运行系统识别的安全命令。
-- 扫描限制：跳过超大文件、二进制文件和常见构建产物，减少噪声和性能风险。
-
-当前还没有完全覆盖的点：
-
-- 更细粒度的权限与多用户隔离
-- 更完善的导入审计与后台任务治理
-- 更强的检索质量评测和回归基准
-
-## 后续规划
-
-- 引入 embedding / rerank，提高跨文件语义检索效果
-- 加入 AST 或语言感知的 symbol 分析，提升定位精度
-- 将 checks 推荐从“按路径”升级为“结合 diff 内容和历史失败”
-- 增加 benchmark 数据与问答评测
-- 支持 checks 失败后的回滚建议、失败归因与修复流
-- 完善后台任务队列、导入审计和运行可观测性
+- 给检索层补 embedding / rerank 对比实验。
+- 增加可执行的 benchmark，而不是只保留 smoke cases。
+- 把 symbol 查找从简单匹配升级到语言感知实现。
+- 改进后台任务队列和导入失败后的恢复。
+- 给前端补截图、状态空页面和更完整的错误展示。
