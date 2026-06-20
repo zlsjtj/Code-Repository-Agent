@@ -196,7 +196,7 @@ class RepositoryService:
             raise RepositoryValidationError(
                 self._localized_message(
                     response_language,
-                    "鍙湁 GitHub 浠撳簱鏀寔鍚庡彴鍏嬮殕浠诲姟銆?",
+                    "只有 GitHub 仓库支持后台克隆任务。",
                     "Only GitHub repositories support background clone jobs.",
                 )
             )

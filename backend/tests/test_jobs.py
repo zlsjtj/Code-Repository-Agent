@@ -64,10 +64,13 @@ def test_create_github_import_job_and_query_status(client, monkeypatch):
     assert payload["repository"]["status"] == "cloning"
     assert payload["job"]["job_type"] == "repository_clone"
     assert payload["job"]["status"] == "queued"
+    assert payload["job"]["message"] == "GitHub 克隆任务已进入队列。"
 
     job_response = client.get(f"/api/jobs/{payload['job']['id']}")
     assert job_response.status_code == 200
-    assert job_response.json()["status"] == "succeeded"
+    job_payload = job_response.json()
+    assert job_payload["status"] == "succeeded"
+    assert job_payload["message"] == "GitHub 克隆完成，可以开始索引了。"
 
     repo_response = client.get(f"/api/repositories/{payload['repository']['id']}")
     assert repo_response.status_code == 200

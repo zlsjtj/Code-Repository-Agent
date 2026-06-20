@@ -47,7 +47,7 @@ def create_repository_import_job(
 ) -> RepositoryImportJobResponse:
     if payload.source_type != "github":
         raise RepositoryValidationError(
-            "鍙湁 GitHub 浠撳簱鍙互浣跨敤鍚庡彴瀵煎叆浠诲姟鎺ュ彛銆?"
+            "只有 GitHub 仓库可以使用后台导入任务接口。"
             if response_language == ResponseLanguage.ZH_CN
             else "Only GitHub repositories can use the background import job endpoint."
         )

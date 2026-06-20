@@ -121,3 +121,20 @@ def test_create_github_repository_rejects_non_github_host(client):
 
     assert response.status_code == 400
     assert "只允许克隆配置白名单中的 Git 主机" in response.json()["detail"]
+
+
+def test_import_job_endpoint_rejects_local_repository_with_localized_message(client, tmp_path):
+    repository_dir = tmp_path / "local-import-job"
+    repository_dir.mkdir()
+
+    response = client.post(
+        "/api/repositories/import-jobs",
+        json={
+            "source_type": "local",
+            "root_path": str(repository_dir),
+        },
+        headers={"X-Response-Language": "zh-CN"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "只有 GitHub 仓库可以使用后台导入任务接口。"

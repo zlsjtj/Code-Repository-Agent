@@ -60,7 +60,7 @@ class JobService:
             status="queued",
             message=self._localized_message(
                 response_language,
-                "GitHub 鍏嬮殕浠诲姟宸茶繘鍏ラ槦鍒椼€?",
+                "GitHub 克隆任务已进入队列。",
                 "GitHub clone job queued.",
             ),
         )
@@ -98,7 +98,7 @@ class JobService:
             raise RepositoryValidationError(
                 self._localized_message(
                     response_language,
-                    "鍙湁澶辫触鐨勪换鍔℃墠鑳介噸璇曘€?",
+                    "只有失败的任务才能重试。",
                     "Only failed jobs can be retried.",
                 )
             )
@@ -110,7 +110,7 @@ class JobService:
             status="queued",
             message=self._localized_message(
                 response_language,
-                "宸插垱寤洪噸璇曚换鍔°€?",
+                "已创建重试任务。",
                 "Retry job queued.",
             ),
         )
@@ -199,7 +199,7 @@ class JobService:
             job.started_at = utc_now()
             job.message = self._localized_message(
                 response_language,
-                "GitHub 鍏嬮殕浠诲姟姝ｅ湪鎵ц銆?",
+                "GitHub 克隆任务正在执行。",
                 "GitHub clone job is running.",
             )
             session.add(job)
@@ -211,7 +211,7 @@ class JobService:
                 raise RepositoryValidationError(
                     self._localized_message(
                         response_language,
-                        "鍙湁 GitHub 浠撳簱鍙互鎵ц鍏嬮殕浠诲姟銆?",
+                        "只有 GitHub 仓库可以执行克隆任务。",
                         "Only GitHub repositories can run clone jobs.",
                     )
                 )
@@ -244,7 +244,7 @@ class JobService:
             job.status = "succeeded"
             job.message = self._localized_message(
                 response_language,
-                "GitHub 鍏嬮殕瀹屾垚锛屽彲浠ュ紑濮嬬储寮曚簡銆?",
+                "GitHub 克隆完成，可以开始索引了。",
                 "GitHub clone completed. The repository is ready for indexing.",
             )
             job.finished_at = utc_now()
