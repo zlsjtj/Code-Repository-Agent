@@ -73,10 +73,14 @@ class JobService:
             job=JobRunRead.model_validate(job),
         )
 
-    def get_job(self, job_id: int) -> JobRunRead:
+    def get_job(
+        self,
+        job_id: int,
+        response_language: ResponseLanguage | None = None,
+    ) -> JobRunRead:
         job = self.db.get(JobRun, job_id)
         if job is None:
-            raise LookupError(f"Job {job_id} was not found.")
+            raise LookupError(self._missing_job_message(job_id, response_language))
         return JobRunRead.model_validate(job)
 
     def list_jobs(self, repo_id: int | None = None, limit: int = 12) -> JobRunListResponse:
@@ -93,7 +97,7 @@ class JobService:
     ) -> JobRunRead:
         existing_job = self.db.get(JobRun, job_id)
         if existing_job is None:
-            raise LookupError(f"Job {job_id} was not found.")
+            raise LookupError(self._missing_job_message(job_id, response_language))
         if existing_job.status != "failed":
             raise RepositoryValidationError(
                 self._localized_message(
@@ -279,3 +283,14 @@ class JobService:
         if response_language == ResponseLanguage.ZH_CN:
             return zh_cn_message
         return en_message
+
+    def _missing_job_message(
+        self,
+        job_id: int,
+        response_language: ResponseLanguage | None,
+    ) -> str:
+        return self._localized_message(
+            response_language,
+            f"未找到任务 #{job_id}。",
+            f"Job {job_id} was not found.",
+        )

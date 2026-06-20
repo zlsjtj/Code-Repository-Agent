@@ -129,3 +129,23 @@ def test_retry_failed_index_job(client, tmp_path, monkeypatch):
 
     fetched_retry = client.get(f"/api/jobs/{retry_payload['id']}").json()
     assert fetched_retry["status"] == "succeeded"
+
+
+def test_get_missing_job_respects_language_header(client):
+    response = client.get(
+        "/api/jobs/999",
+        headers={"X-Response-Language": "zh-CN"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "未找到任务 #999。"
+
+
+def test_retry_missing_job_respects_language_header(client):
+    response = client.post(
+        "/api/jobs/999/retry",
+        headers={"X-Response-Language": "zh-CN"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "未找到任务 #999。"

@@ -21,9 +21,13 @@ def list_jobs(
 
 
 @router.get("/{job_id}", response_model=JobRunRead)
-def get_job(job_id: int, db: Session = Depends(get_db)) -> JobRunRead:
+def get_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    response_language: ResponseLanguage | None = Depends(get_response_language),
+) -> JobRunRead:
     service = JobService(db)
-    return service.get_job(job_id)
+    return service.get_job(job_id, response_language)
 
 
 @router.post("/{job_id}/retry", response_model=JobRunRead)
