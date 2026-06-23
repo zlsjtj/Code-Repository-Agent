@@ -57,9 +57,13 @@ def create_repository_import_job(
 
 
 @router.get("/{repo_id}", response_model=RepositoryRead)
-def get_repository(repo_id: int, db: Session = Depends(get_db)) -> RepositoryRead:
+def get_repository(
+    repo_id: int,
+    db: Session = Depends(get_db),
+    response_language: ResponseLanguage | None = Depends(get_response_language),
+) -> RepositoryRead:
     service = RepositoryService(db)
-    return service.get_repository(repo_id)
+    return service.get_repository(repo_id, response_language)
 
 
 @router.get("/{repo_id}/tree", response_model=RepositoryTreeResponse)
@@ -85,11 +89,15 @@ def get_repository_tree(
 
 
 @router.get("/{repo_id}/index-status", response_model=RepositoryIndexStatusResponse)
-def get_index_status(repo_id: int, db: Session = Depends(get_db)) -> RepositoryIndexStatusResponse:
+def get_index_status(
+    repo_id: int,
+    db: Session = Depends(get_db),
+    response_language: ResponseLanguage | None = Depends(get_response_language),
+) -> RepositoryIndexStatusResponse:
     repository_service = RepositoryService(db)
     indexing_service = IndexingService(db)
 
-    repository = repository_service.get_repository(repo_id)
+    repository = repository_service.get_repository(repo_id, response_language)
     return indexing_service.get_index_status(repository)
 
 

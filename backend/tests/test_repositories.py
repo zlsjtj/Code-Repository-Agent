@@ -109,6 +109,26 @@ def test_list_chunks_respects_language_header_for_missing_repository(client):
     assert response.json()["detail"] == "未找到仓库 #999。"
 
 
+def test_get_repository_respects_language_header_for_missing_repository(client):
+    response = client.get(
+        "/api/repositories/999",
+        headers={"X-Response-Language": "zh-CN"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "未找到仓库 #999。"
+
+
+def test_index_status_respects_language_header_for_missing_repository(client):
+    response = client.get(
+        "/api/repositories/999/index-status",
+        headers={"X-Response-Language": "zh-CN"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "未找到仓库 #999。"
+
+
 def test_create_github_repository_rejects_non_github_host(client):
     response = client.post(
         "/api/repositories",
